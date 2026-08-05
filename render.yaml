@@ -1,0 +1,48 @@
+# Render Blueprint — deploy the whole stack with one click.
+# Dashboard -> New -> Blueprint -> point at this repo.
+databases:
+  - name: razmania-db
+    databaseName: razmania
+    user: razmania
+    plan: basic-256mb          # $6/mo. Do NOT use the free plan: it EXPIRES after 30 days.
+    postgresMajorVersion: "16"
+
+services:
+  # Read API consumed by WordPress.
+  - type: web
+    name: razmania-cards-api
+    runtime: python
+    plan: starter              # $7/mo. The free plan sleeps after 15 min and cold-starts ~1 min.
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /v1/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: razmania-db, property: connectionString }
+      - key: ALLOWED_ORIGINS
+        value: https://razmania.com,https://www.razmania.com
+      - key: API_KEY
+        generateValue: true
+      - key: CACHE_SECONDS
+        value: "1800"
+
+  # DAILY refresh: scrape -> load -> rebuild aggregates -> freshness gate.
+  # Runs at 09:00 UTC (05:00 ET) so the site is current before US morning traffic.
+  # A 2-day scrape window means a single missed run self-heals on the next one.
+  - type: cron
+    name: razmania-daily-refresh
+    runtime: python
+    plan: starter              # billed per second; ~15 min/day => well under $1/mo
+    schedule: "0 9 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: ./etl/refresh_daily.sh
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: razmania-db, property: connectionString }
+      - key: APIFY_TOKEN
+        sync: false            # set this by hand in the dashboard
+      - key: TIER
+        value: full            # "full" = everything $500+. "top" = $2,000+ only (~4x cheaper)
+      # DAYS is intentionally unset: refresh_daily.sh derives the window from how
+      # stale the DB actually is (1 day normally, wider after a missed run).
+      # Set it explicitly only to pin the window for a backfill.
