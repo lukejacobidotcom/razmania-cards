@@ -274,7 +274,14 @@ BEGIN
         CREATE ROLE razmania_read LOGIN PASSWORD 'CHANGE_ME';
     END IF;
 END $$;
-GRANT CONNECT ON DATABASE razmania TO razmania_read;
+-- current_database(), not a literal. Render appends a suffix when a name is
+-- already taken (this one landed as "razmania_93dv"), and a hardcoded name
+-- aborts the whole file at the last statement — after the views are built,
+-- so it looks like it worked until the read role can't connect.
+DO $$
+BEGIN
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO razmania_read', current_database());
+END $$;
 GRANT USAGE ON SCHEMA public TO razmania_read;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO razmania_read;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO razmania_read;

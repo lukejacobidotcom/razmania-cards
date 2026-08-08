@@ -12,9 +12,9 @@ Output: cards_listings.csv (one row per sale, parsed)
 import json
 import re
 import unicodedata
+from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
 
 # --------------------------------------------------------------------------
 # Reference vocabularies
@@ -211,14 +211,17 @@ SOLD_DATE = re.compile(r"(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})")
 
 
 def parse_sold_date(s):
-    """'Sold  3 Aug 2026' -> Timestamp."""
+    """'Sold  3 Aug 2026' -> datetime.date, or None."""
     if not isinstance(s, str):
-        return pd.NaT
+        return None
     m = SOLD_DATE.search(s)
     if not m:
-        return pd.NaT
-    return pd.to_datetime(f"{m.group(1)} {m.group(2)} {m.group(3)}",
-                          format="%d %b %Y", errors="coerce")
+        return None
+    try:
+        return datetime.strptime(f"{m.group(1)} {m.group(2)} {m.group(3)}",
+                                 "%d %b %Y").date()
+    except ValueError:
+        return None
 
 
 SHIP = re.compile(r"([\d,]+\.\d{2})")
@@ -292,6 +295,11 @@ def load_rows(paths):
 
 
 def build(paths, outdir="out"):
+    """Legacy one-off CSV exporter. NOT part of the daily pipeline (that path is
+    load.py -> Postgres). pandas is imported HERE, not at module scope, so the
+    cron job never has to install a 50 MB dependency for four call sites."""
+    import pandas as pd                                            # noqa: PLC0415
+
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
