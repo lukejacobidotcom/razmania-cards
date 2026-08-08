@@ -52,16 +52,47 @@ COMMENT ON COLUMN sales.best_offer_accepted IS
   'TRUE means eBay published the seller ASKING price, not the accepted offer. '
   'These rows are price CEILINGS. Every published stat must exclude them.';
 
+CREATE TABLE IF NOT EXISTS schema_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+
 -- A single boolean that encodes "this row is safe to publish a price from".
 -- Defined once here so the API, the views and the front end can never disagree.
--- Added conditionally: the materialized views below depend on this column, so a
--- drop-and-recreate would fail on every re-run of this file.
+--
+-- Three conditions:
+--   1. not best-offer-accepted  — eBay publishes the ASKING price on those
+--   2. not junk                 — lots, reprints, "u pick", custom
+--   3. at or above the publish floor
+--
+-- (3) is the important one. etl/scrape.py only COLLECTS at or above MIN_PRICE
+-- (default $2,000, ~739 sales/day, ~$111/mo at Apify's per-row billing). If the
+-- views were allowed to aggregate below that floor they would publish medians
+-- over a range we only partially collect — a truncated sample presented as a
+-- market read. Enforcing the floor here means every view, index and API
+-- endpoint inherits it automatically and the site physically cannot publish a
+-- number it can't back.
+--
+-- Rows BELOW the floor are still stored (the $500+ seed backfill, plus anything
+-- collected before the floor was raised). They stay available to /v1/search and
+-- to a future backfill; they just never reach a published aggregate.
+--
+-- Change publish_floor below to change coverage. The column is STORED and the
+-- views depend on it, so the block rebuilds both only when the floor moves.
 DO $$
+DECLARE
+    publish_floor CONSTANT int := 2000;
+    built int;
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                   WHERE table_name = 'sales' AND column_name = 'is_publishable') THEN
-        ALTER TABLE sales ADD COLUMN is_publishable BOOLEAN
-            GENERATED ALWAYS AS (NOT best_offer_accepted AND NOT is_junk) STORED;
+    SELECT v::int INTO built FROM schema_meta WHERE k = 'publish_floor';
+    IF built IS DISTINCT FROM publish_floor
+       OR NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name = 'sales' AND column_name = 'is_publishable') THEN
+        RAISE NOTICE 'building is_publishable with floor $%', publish_floor;
+        ALTER TABLE sales DROP COLUMN IF EXISTS is_publishable CASCADE;
+        EXECUTE format(
+            'ALTER TABLE sales ADD COLUMN is_publishable BOOLEAN GENERATED ALWAYS AS '
+            '(NOT best_offer_accepted AND NOT is_junk AND total_price >= %s) STORED',
+            publish_floor);
+        INSERT INTO schema_meta (k, v) VALUES ('publish_floor', publish_floor::text)
+            ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v;
     END IF;
 END $$;
 
@@ -205,7 +236,13 @@ CREATE UNIQUE INDEX mv_vertical_wow_pk ON mv_vertical_wow (vertical);
 DROP MATERIALIZED VIEW IF EXISTS mv_site_stats CASCADE;
 CREATE MATERIALIZED VIEW mv_site_stats AS
 SELECT
-    (SELECT count(*) FROM sales)                              AS total_sales,
+    -- Both counts respect the publish floor. total_sales deliberately does NOT
+    -- count every row in the table: rows below the floor exist but are not part
+    -- of what the site claims to track, and a headline number the data can't
+    -- back is worse than no headline number.
+    (SELECT count(*) FROM sales
+      WHERE total_price >= (SELECT v::numeric FROM schema_meta
+                             WHERE k = 'publish_floor'))       AS total_sales,
     (SELECT count(*) FROM sales WHERE is_publishable)         AS confirmed_sales,
     (SELECT sum(total_price) FROM sales WHERE is_publishable) AS total_gmv,
     (SELECT max(total_price) FROM sales WHERE is_publishable) AS biggest_sale,

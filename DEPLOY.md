@@ -1,136 +1,157 @@
 # Deploy checklist — RazMania Card Data
 
-Everything is built and tested. This is what a human has to do. ~45 minutes.
+Config is already decided and committed: **`MIN_PRICE=2000`, ~$126/mo all-in.**
+Nothing below needs a decision — it's mechanical. ~30 minutes.
+
+| | |
+|---|---|
+| Apify (`MIN_PRICE=2000`, 739 sales/day, 2-day window) | ~$111/mo |
+| Render Postgres `basic-256mb` + 5 GB | $7.50/mo |
+| Render web service `starter` | $7/mo |
+| Render cron `starter`, ~10 min/day | ~$0.75/mo |
+| **Total** | **~$126/mo** |
+
+The leaderboard — the flagship homepage module — is **byte-identical** to what
+$500+ coverage would produce. The 50th-biggest sale of a week is ~$27,000.
 
 ---
 
-## Decision to make first
+## Step 1 — Render Blueprint (10 min)
 
-**Pick a tier.** This is the only real choice; everything else is mechanical.
+Render → **New → Blueprint** → pick `lukejacobidotcom/razmania-cards`.
+`render.yaml` creates three things:
 
-| | Apify cost | Biggest-sales module | Medians / hottest markets |
-|---|---|---|---|
-| `TIER=full` ($500+) | **~$236/mo** | complete | complete |
-| `TIER=top` ($2,000+) | **~$56/mo** | **identical** | only reflects $2,000+ sales |
+- `razmania-db` — Postgres `basic-256mb`
+- `razmania-cards-api` — web service `starter`
+- `razmania-daily-refresh` — cron, daily 09:00 UTC (05:00 ET)
 
-The leaderboard is byte-identical either way — the 50th-biggest sale of the week
-is ~$27,000, so nothing under $2,000 ever appears on it.
+You already have an **empty** `razmania-db` (`dpg-d9p5hsht0dsc73capt70-a`).
+Let the Blueprint create its own and **delete the old empty one** — do not run two.
 
-**Recommended start: `TIER=top` (~$56/mo)**, plus one weekly `TIER=full` run
-(~$54/wk) to keep medians honest. Move to daily `full` when traffic justifies it.
-Total ~$110/mo vs ~$250/mo, with no visible difference on the homepage.
+Then on the **cron job** → Environment, set one value by hand:
 
----
+- `APIFY_TOKEN` = your Apify token
 
-## Step 1 — Rotate the Apify token (2 min) ⚠️
+`MIN_PRICE=2000` is already in `render.yaml`. Do not switch anything to a free
+plan: free Postgres expires after 30 days and a free web service sleeps after
+15 min with a ~1 min cold start.
 
-The token you pasted is in chat history and in this container. Apify Console →
-Settings → Integrations → revoke it, create a new one. Use the new one below.
-
-## Step 2 — Push to GitHub (5 min)
-
-```bash
-unzip razmania-cards-platform.zip && cd razmania-cards
-git init && git add . && git commit -m "RazMania card data platform"
-git remote add origin git@github.com:<you>/razmania-cards.git
-git push -u origin main
-```
-
-`.gitignore` already excludes `.env`, `raw/` and `out/`. The seed data
-(`seed/sales_all.csv.gz`, 1.4 MB) **is** committed on purpose — it's your backfill.
-
-## Step 3 — Render Blueprint (10 min)
-
-Render → **New → Blueprint** → pick the repo. `render.yaml` creates:
-
-- `razmania-db` — Postgres `basic-256mb` ($6/mo)
-- `razmania-cards-api` — web service `starter` ($7/mo)
-- `razmania-daily-refresh` — cron, daily 09:00 UTC (~$0.75/mo)
-
-Then on the **cron job** → Environment:
-
-- `APIFY_TOKEN` = your new token
-- `TIER` = `top` or `full` (see the decision above)
-
-Do **not** switch anything to a free plan. Free Postgres expires after 30 days
-and a free web service sleeps after 15 min with a ~1 min cold start.
-
-## Step 4 — Initialise the database (5 min)
+## Step 2 — Initialise the database (5 min)
 
 Copy the **External Database URL** from the Render Postgres page, then locally:
 
 ```bash
 export DATABASE_URL='postgres://...'          # from Render
-psql "$DATABASE_URL" -f db/schema.sql          # creates tables + 6 materialized views
+psql "$DATABASE_URL" -f db/schema.sql
 python3 -m pip install -r requirements.txt
 python3 etl/load.py --csv seed/sales_all.csv.gz
+psql "$DATABASE_URL" -c "ALTER ROLE razmania_read PASSWORD '<something-long>';"
 ```
 
-Expected output — this is the exact result verified on a clean database:
+Expected output, verified end-to-end on a clean database:
 
 ```
+NOTICE:  building is_publishable with floor $2000
 read 21,766 rows -> 21,766 unique, >= $500
 inserted 21,766 new / updated 0 | table now 21,766
 materialized views refreshed
 ```
 
-Then set the read-only role's password (schema.sql creates it with a placeholder):
+**21,766 loaded but only 5,175 tracked is correct, not a bug.** The seed is
+$500+ data you already paid for. It stays in the table for `/v1/search` and for
+the day you drop the floor, but the publish floor keeps it out of every
+aggregate. Sanity check:
 
 ```bash
-psql "$DATABASE_URL" -c "ALTER ROLE razmania_read PASSWORD '<something-long>';"
+psql "$DATABASE_URL" -c \
+  "SELECT count(*) total, count(*) FILTER (WHERE is_publishable) publishable,
+          min(total_price) FILTER (WHERE is_publishable) min_published FROM sales;"
 ```
+Must return `21766 | 3815 | 2000.00`. If `min_published` is under 2000 the floor
+did not apply — stop and re-run `db/schema.sql`.
 
-## Step 5 — Verify the API (2 min)
+## Step 3 — Verify the API (2 min)
 
 ```bash
 curl https://<your-api>.onrender.com/v1/health
+curl "https://<your-api>.onrender.com/v1/search?q=charizard&limit=3"
 ```
 
-Should return `"ok":true`, `"fresh":true`, `"rows":21766`. If `fresh` is false,
-the daily cron hasn't run yet — that's fine on day one.
+`/v1/health` should return `"ok":true` and `"rows":5175`. `fresh` will be false
+until the first cron run — expected on day one. Search must return rows; empty
+means the trigram index didn't build.
 
 Copy the auto-generated `API_KEY` from the API service's Environment tab.
 
-## Step 6 — WordPress (10 min)
+## Step 4 — Prove the cron runs (do NOT skip)
+
+Don't wait for 09:00 UTC to discover it's broken. On `razmania-daily-refresh`
+hit **Trigger Run** and watch the logs. A healthy run prints:
+
+```
+==> database is 4d behind -> 6d window, floor $2000
+==> 1/4 scraping
+min_price=$2,000 days=6 bands=6
+==> 2/4 loading + refreshing aggregates
+==> 3/4 retention + vacuum
+==> 4/4 freshness gate
+freshness OK
+==> done
+```
+
+It **exits non-zero on purpose** if the newest sale is more than 2 days old or
+the leaderboard is empty. That failure is the alert — turn on Render's failure
+notifications for this service. It is the one thing that will silently rot.
+
+The first run costs more than a normal day (6-day catch-up window, ~4,400 rows
+≈ $11). Every run after that is ~1,478 rows ≈ $3.70.
+
+**Check back in a week.** `/v1/health` should show `days_stale` of 0 or 1 and a
+`last_successful_refresh` from that morning.
+
+## Step 5 — WordPress (10 min)
 
 1. Upload `wordpress/razmania-cards/` to `wp-content/plugins/` (or zip that
    folder and use Plugins → Add New → Upload).
 2. Activate it.
 3. **Settings → RazMania Cards** → paste the API base URL and the API key.
-4. Drop a shortcode on a page and confirm it renders:
+4. Drop shortcodes on a page:
    ```
    [razmania_leaderboard limit="10"]
    [razmania_verticals]
    [razmania_stats]
    ```
-5. **View source** on that page. The prices must be in the raw HTML. If they
-   only appear after JavaScript runs, Google won't index them and the SEO case
-   for this whole project collapses.
-
-## Step 7 — Watch the first cron run
-
-Render → `razmania-daily-refresh` → Logs, after the first 09:00 UTC firing.
-A healthy run ends with `freshness OK` then `done`. It **exits non-zero on
-purpose** if the newest sale is more than 2 days old — that failure is the alert.
-
-Turn on Render's failure notifications for that service. This is the one thing
-that will silently rot if nobody watches it.
+5. **View source.** The prices must be in the raw HTML. If they only appear
+   after JavaScript runs, Google won't index them and the SEO case for this
+   whole project collapses.
+6. **Label the floor.** Headline copy must say "biggest card sales over $2,000"
+   or "tracked sales over $2,000" — never "all card sales". The database cannot
+   publish a number below the floor, but it cannot stop you mislabelling one.
 
 ---
+
+## When to change the floor
+
+Drop `MIN_PRICE` to `500` (and `publish_floor` in `db/schema.sql` to match, then
+re-run that file) when you start building **player value pages**. At $2,000+ only
+17 cards clear the n≥3 comps rule and 72 players have data — not enough for the
+SEO engine. At $500+ it was 111 players and far deeper comps. That change takes
+Apify from ~$111 to ~$466/mo, so make it when the pages actually ship.
+
+Homepage modules need no such change. They are complete today.
+
+## Housekeeping
+
+- **Revoke the GitHub PAT** — it has Contents + Administration write on every
+  repo in your account. GitHub → Settings → Developer settings → Personal access
+  tokens → revoke.
+- **Delete the stray `.git` in `C:/Users/luke`.** Run `git log --oneline -1`
+  there first to confirm it isn't a real repo, then `rm -rf ~/.git`.
 
 ## Send me back
 
 1. The API base URL (`https://....onrender.com`)
 2. Confirmation the shortcodes render server-side
 
-I'll update the front-end brief with the real URL so the other chat can build
-against it, and generate the player-page URL list for the SEO build.
-
----
-
-## Things I could not do for you
-
-- Rotate the Apify token (your account)
-- Create the GitHub repo / Render services (your accounts, your billing)
-- Upload to GoDaddy WordPress (your hosting credentials)
-- Point razmania.com at the WordPress install if it isn't already
+I'll point the front-end brief at the real URL and generate the player-page URL
+list for the SEO build.

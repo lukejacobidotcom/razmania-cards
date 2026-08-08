@@ -28,7 +28,8 @@ services:
 
   # DAILY refresh: scrape -> load -> rebuild aggregates -> freshness gate.
   # Runs at 09:00 UTC (05:00 ET) so the site is current before US morning traffic.
-  # A 2-day scrape window means a single missed run self-heals on the next one.
+  # The scrape window is derived from how stale the DB is, plus a per-tier
+  # overlap, so yesterday is always re-read and a missed run self-heals.
   - type: cron
     name: razmania-daily-refresh
     runtime: python
@@ -41,8 +42,16 @@ services:
         fromDatabase: { name: razmania-db, property: connectionString }
       - key: APIFY_TOKEN
         sync: false            # set this by hand in the dashboard
-      - key: TIER
-        value: full            # "full" = everything $500+. "top" = $2,000+ only (~4x cheaper)
-      # DAYS is intentionally unset: refresh_daily.sh derives the window from how
-      # stale the DB actually is (1 day normally, wider after a missed run).
-      # Set it explicitly only to pin the window for a backfill.
+      - key: MIN_PRICE
+        value: "2000"          # The only cost knob. Apify bills per ROW RETURNED.
+                               #   $2,000+  ~739 sales/day   ~$111/mo  <- current
+                               #   $1,000+  ~1,477/day       ~$222/mo
+                               #     $500+  ~3,109/day       ~$466/mo
+                               # The leaderboard is IDENTICAL at every floor (the
+                               # 50th-biggest sale of a week is ~$27,000). Lowering
+                               # the floor only buys medians further down-market.
+                               # If you change it, change publish_floor in
+                               # db/schema.sql to match and re-run that file.
+      # The scrape window is NOT configurable here on purpose. refresh_daily.sh
+      # derives it from max(sold_date) so a missed run automatically widens the
+      # next one. Hard-coding a window is how you get a permanent daily gap.

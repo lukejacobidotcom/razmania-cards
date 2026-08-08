@@ -73,10 +73,14 @@ def health():
     """Includes staleness so the front end can surface a warning instead of
     silently rendering week-old prices as if they were today's."""
     try:
+        # Scoped to the publish floor so `rows` agrees with /v1/stats.
+        # Rows below the floor are stored but are not what the site tracks.
         row = q("""SELECT max(sold_date) AS last_sale,
                           count(*) AS rows,
                           (current_date - max(sold_date)) AS days_stale
-                   FROM sales""")[0]
+                   FROM sales
+                   WHERE total_price >= (SELECT v::numeric FROM schema_meta
+                                          WHERE k = 'publish_floor')""")[0]
         last_run = q("""SELECT finished_at, status, rows_inserted, rows_updated
                         FROM refresh_log
                         WHERE status = 'ok'
@@ -190,14 +194,23 @@ def comps(player: Optional[str] = None, grade: Optional[str] = None,
 @app.get("/v1/search")
 def search(q_: str = Query(..., alias="q", min_length=3),
            limit: int = Query(40, ge=1, le=200)):
-    """Fuzzy title search, backed by the trigram index."""
+    """Title search, backed by the trigram index.
+
+    Substring OR trigram, not trigram alone. Card titles are long
+    ("Pop 2 BGS 10 Rayquaza Gold Star 1st Ed - Clash of the Blue Sky 067/082
+    Pokemon") and a one-word query scores far below pg_trgm's 0.3 default
+    threshold against them — 'charizard' peaks at 0.294 across 219 matching
+    rows, so a pure `title %% q` search returned NOTHING for the single most
+    searched card in the hobby. ILIKE '%%q%%' uses the same gin_trgm_ops index,
+    so this stays one index scan; similarity is kept only for ranking.
+    """
     return {"results": q(
         """SELECT item_id, title, vertical, total_price, sold_date, grade_label,
                   url, image_url, similarity(title, %s) AS score
            FROM sales
-           WHERE is_publishable AND title %% %s
+           WHERE is_publishable AND (title ILIKE '%%' || %s || '%%' OR title %% %s)
            ORDER BY score DESC, total_price DESC LIMIT %s""",
-        (q_, q_, limit))}
+        (q_, q_, q_, limit))}
 
 
 @app.get("/v1/sales")

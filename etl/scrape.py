@@ -1,11 +1,26 @@
 """
-Daily eBay scrape via the Apify REST API (no MCP, no desktop bridge needed).
+Daily eBay scrape via the Apify REST API.
 
   export APIFY_TOKEN=...
-  python3 etl/scrape.py --out /tmp/razmania/raw --tier full --days 2
+  python3 etl/scrape.py --out /tmp/razmania/raw --days 2
 
 Runs the caffein.dev/ebay-sold-listings Actor once per (category, price band)
 and writes each run's dataset to raw/<runId>.jsonl.
+
+ONE KNOB: MIN_PRICE (env or --min-price, default 2000).
+
+  Apify bills per ROW RETURNED, not per run. The database upsert on item_id
+  dedupes perfectly, but only AFTER Apify has billed. So the only levers on cost
+  are the price floor and the scrape window width — cadence is irrelevant.
+
+  At $2,000+ the site tracks ~739 sales/day for ~$111/mo. Dropping the floor to
+  $500 quadruples volume to ~3,109/day and ~$466/mo. The leaderboard is
+  IDENTICAL either way: the 50th-biggest sale of a week is ~$27,000.
+
+  Raising the floor is not free sampling — it biases every published median
+  upward (Pokemon median $1,131 at $500+ vs $2,282 at $1,000+). That is why the
+  floor is also enforced in db/schema.sql, so the site can only ever publish
+  aggregates over the range actually being collected.
 
 Why this Actor: it is the only one tested that returns `isBestOfferAccepted`.
 At $500+, ~30% of listings are best-offer-accepted, and eBay publishes the
@@ -33,38 +48,30 @@ from pathlib import Path
 ACTOR = "caffein.dev~ebay-sold-listings"
 API = "https://api.apify.com/v2"
 
-SPORTS, CCG = "261328", "183454"          # both VERIFIED to actually filter.
+CATEGORIES = ["261328", "183454"]   # Sports Card Singles, CCG Singles.
 # eBay's legacy IDs 213/215/216 (baseball/football/hockey) are silently IGNORED
 # by eBay — they return unfiltered results with no error. Never use them.
 
-ALL_BANDS = [
-    (SPORTS, 500, 649), (SPORTS, 650, 799), (SPORTS, 800, 999),
-    (SPORTS, 1000, 1499), (SPORTS, 1500, 2999), (SPORTS, 3000, None),
-    (CCG, 500, 699), (CCG, 700, 999), (CCG, 1000, 1999), (CCG, 2000, None),
-]
+# Band edges. Bands are built from every cut at or above MIN_PRICE, so they are
+# disjoint by construction and no row is ever fetched (and billed) twice.
+# Sized so even a 6-day catch-up window stays under ~1,200 rows/band, well clear
+# of the Actor's ~3,000-row OOM ceiling.
+CUTS = [500, 650, 800, 1000, 1500, 2000, 3000, 5000]
 
-# Daily cadence. A 2-day window means every run re-scrapes yesterday, so a single
-# missed or failed run self-heals on the next one. That overlap is the ONLY extra
-# cost of running daily instead of weekly — you pay per sale returned either way.
+DEFAULT_MIN_PRICE = 2000
 DEFAULT_DAYS = 2
-COUNT = 3000                              # per band; the Actor OOMs much past this
-
-# Tiers let you trade freshness for spend without touching code.
-#   full  — everything over $500. ~6,200 rows/run at a 2-day window.
-#   top   — only $2,000+. ~1,500 rows/run. The leaderboard is identical either way
-#           (the 50th-biggest sale of the week is ~$27k), but medians and market
-#           GMV go stale on the low end, so pair this with a weekly `full` run.
-TIER_MIN_PRICE = {"full": 500, "top": 2000}
+COUNT = 3000
 
 
-def bands_for(tier):
-    """Drop bands entirely below the tier floor; clamp the one that straddles it."""
-    floor = TIER_MIN_PRICE[tier]
+def bands_for(min_price):
+    """(category, lo, hi) tuples covering [min_price, infinity), disjoint."""
+    edges = [c for c in CUTS if c >= min_price] or [min_price]
+    edges[0] = min_price
     out = []
-    for cat, lo, hi in ALL_BANDS:
-        if hi is not None and hi < floor:
-            continue
-        out.append((cat, max(lo, floor), hi))
+    for cat in CATEGORIES:
+        for i, lo in enumerate(edges):
+            hi = edges[i + 1] - 1 if i + 1 < len(edges) else None
+            out.append((cat, lo, hi))
     return out
 
 
@@ -108,8 +115,7 @@ def wait(run_id, token, limit=2400):
 
 def download(ds_id, out, token):
     n, offset = 0, 0
-    path = out / f"{ds_id}.jsonl"
-    with open(path, "w") as fh:
+    with open(out / f"{ds_id}.jsonl", "w") as fh:
         while True:
             qs = urllib.parse.urlencode({"offset": offset, "limit": 1000,
                                          "format": "json", "clean": "true"})
@@ -128,8 +134,9 @@ def download(ds_id, out, token):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="raw")
-    ap.add_argument("--tier", choices=["full", "top"], default="full")
     ap.add_argument("--days", type=int, default=DEFAULT_DAYS)
+    ap.add_argument("--min-price", type=int,
+                    default=int(os.environ.get("MIN_PRICE", DEFAULT_MIN_PRICE)))
     args = ap.parse_args()
     token = os.environ.get("APIFY_TOKEN")
     if not token:
@@ -138,8 +145,8 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    bands = bands_for(args.tier)
-    print(f"tier={args.tier} days={args.days} bands={len(bands)}")
+    bands = bands_for(args.min_price)
+    print(f"min_price=${args.min_price:,} days={args.days} bands={len(bands)}")
     started, total, failed = [], 0, []
     for cat, lo, hi in bands:
         try:

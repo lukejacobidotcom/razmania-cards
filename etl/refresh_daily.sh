@@ -6,26 +6,34 @@ set -euo pipefail
 : "${DATABASE_URL:?set DATABASE_URL}"
 : "${APIFY_TOKEN:?set APIFY_TOKEN}"
 
-TIER=${TIER:-full}          # full ($500+) | top ($2,000+)
+MIN_PRICE=${MIN_PRICE:-2000}
 WORK=${WORK:-/tmp/razmania}
 rm -rf "$WORK/raw"; mkdir -p "$WORK/raw"
 
-# ---------------------------------------------------------------- adaptive window
-# You pay Apify per sale RETURNED, so a fixed 2-day window doubles the bill every
-# single day just to insure against the occasional missed run. Instead: look at
-# how stale the database actually is and scrape exactly that far back (+1 day of
-# safety). Normal day => 1 day of data. After a failed run => it widens by itself.
-# Halves the running cost versus a fixed 2-day window, with the same self-healing.
-GAP=$(psql "$DATABASE_URL" -tAc \
-  "SELECT LEAST(GREATEST(COALESCE(current_date - max(sold_date), 3) + 1, 1), 5) FROM sales")
-DAYS=${DAYS:-$GAP}
-echo "==> database is $(( DAYS - 1 ))d behind; scraping a ${DAYS}d window (tier=$TIER)"
+# ------------------------------------------------------- window calculation
+# BASE = how many whole days behind the database is.
+#
+# BASE alone is NOT a safe window. eBay sales land around the clock, so by the
+# time this runs (09:00 UTC) a sale dated *today* has usually already landed —
+# which makes max(sold_date) = today, BASE = 0, and a 1-day window. That would
+# scrape only the current day, every day, and never revisit the sales that
+# completed after yesterday's run. A permanent, silent daily gap.
+#
+# Fix: always add 2. Yesterday is therefore always fully re-read, so the
+# leaderboard is provably complete, and a missed run widens the next window
+# automatically. Capped at 6 because eBay's sold search gets unreliable beyond
+# about a week and a runaway window is a runaway bill.
+BASE=$(psql "$DATABASE_URL" -tAc \
+  "SELECT GREATEST(COALESCE(current_date - max(sold_date), 2), 0) FROM sales")
+DAYS=$(( BASE + 2 )); [ "$DAYS" -gt 6 ] && DAYS=6
+
+echo "==> database is ${BASE}d behind -> ${DAYS}d window, floor \$${MIN_PRICE}"
 
 echo "==> 1/4 scraping"
-python3 etl/scrape.py --out "$WORK/raw" --tier "$TIER" --days "$DAYS"
+python3 etl/scrape.py --out "$WORK/raw" --days "$DAYS" --min-price "$MIN_PRICE"
 
 echo "==> 2/4 loading + refreshing aggregates"
-python3 etl/load.py "$WORK/raw/*.jsonl"
+python3 etl/load.py "$WORK/raw/*.jsonl" --min-price "$MIN_PRICE"
 
 echo "==> 3/4 retention + vacuum"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/retention.sql
@@ -38,11 +46,10 @@ cur.execute("SELECT max(sold_date), count(*) FROM sales")
 last, n = cur.fetchone()
 age = (datetime.date.today() - last).days
 print(f"latest sale {last} ({age}d old), {n:,} rows")
-# On a daily cadence anything over 2 days old means the scrape came back empty.
 # A refresh that "succeeds" while leaving stale prices on a card-value site is
-# the failure mode that actually costs us.
+# the failure mode that actually costs us. Fail loudly instead.
 if age > 2:
-    sys.exit(f"FAIL: newest sale is {age} days old — scrape likely returned nothing")
+    sys.exit(f"FAIL: newest sale is {age} days old - scrape likely returned nothing")
 cur.execute("SELECT count(*) FROM mv_leaderboard_7d")
 lb = cur.fetchone()[0]
 if lb == 0:

@@ -32,48 +32,56 @@ request must never trigger an aggregation.
 | 7-day leaderboard + rank | **Postgres** (`mv_leaderboard_7d`) | Window functions over the full set. |
 | Per-card comps with the n≥3 rule | **Postgres** (`mv_card_comps`) | The rule is enforced in SQL so no client can bypass it. |
 | Player rollups + slugs | **Postgres** (`mv_player_summary`) | URL slugs generated once, not per request. |
-| Excluding best-offer rows | **Postgres** (`is_publishable` generated column) | Defined in exactly one place so API, views and site can never disagree. |
+| Excluding best-offer rows **and rows below the publish floor** | **Postgres** (`is_publishable` generated column) | Defined in exactly one place so API, views and site can never disagree. |
 | Sorting/filtering a fetched page, tab switching, search-as-you-type over loaded rows | **Front end** | Zero-latency, no network. |
 | Currency/date formatting, sparkline drawing, responsive tables | **Front end** | Presentation. |
 | Full-text search across all sales | **Postgres** (`pg_trgm`) | Needs the index. Exposed as `/v1/search`. |
 
 `is_publishable` is the load-bearing piece. It is a **generated column**:
-`NOT best_offer_accepted AND NOT is_junk`. About 30% of $500+ listings are
-best-offer-accepted, and on those eBay publishes the seller's **asking price,
-not what was paid**. Every view filters on this column, so a wrong number
-cannot reach the site by accident.
+`NOT best_offer_accepted AND NOT is_junk AND total_price >= publish_floor`.
+About 30% of listings are best-offer-accepted, and on those eBay publishes the
+seller's **asking price, not what was paid**. Every view filters on this column,
+so neither a best-offer price nor a partially-collected price range can reach
+the site by accident.
 
 ## Cost
 
 | Service | Plan | Cost |
 |---|---|---|
-| Render Postgres | `basic-256mb` | **$6/mo** |
+| Render Postgres | `basic-256mb` + 5 GB storage | **$7.50/mo** |
 | Render Web Service (API) | `starter` | **$7/mo** |
 | Render Cron (daily) | `starter`, ~15 min/day | **~$0.75/mo** |
-| Apify scrape | see below | **~$236/mo** |
-| **Total** | | **~$250/mo** |
+| Apify scrape | `MIN_PRICE=2000` | **~$111/mo** |
+| **Total** | | **~$126/mo** |
 
 ### Apify is the real cost — and it scales with rows, not runs
 
-Measured from the loaded data: **3,109 sales/day over $500**, at $0.0025/row.
-You pay per sale *returned*, so the cadence barely matters — the **scrape window
-width** is what costs money.
+Apify bills per row **returned**, not per run. The `item_id` upsert dedupes
+perfectly, but only *after* Apify has billed. So cadence is irrelevant and the
+only two levers are the **price floor** and the **window width**.
 
-| Setup | Rows/run | Cost |
-|---|---|---|
-| Daily, adaptive 1-day window (**default**) | ~3,100 | **~$236/mo** |
-| Daily, fixed 2-day window | ~6,200 | ~$473/mo |
-| Weekly, 7-day window | ~21,800 | ~$237/mo |
-| Daily `TIER=top` ($2,000+ only) | ~740 | **~$56/mo** |
+| `MIN_PRICE` | Sales/day | 2-day window | Apify/mo | What it buys |
+|---|---|---|---|---|
+| **`2000` (current)** | 739 | 1,478 rows | **~$111** | complete leaderboard + $2,000+ medians |
+| `1000` | 1,477 | 2,954 rows | ~$222 | + medians down to $1,000 |
+| `500` | 3,109 | 6,218 rows | ~$466 | + medians down to $500, deep player comps |
 
-**Daily costs the same as weekly** at a 1-day window — you are scraping the same
-sales either way. That is why `refresh_daily.sh` derives its window from actual
-database staleness instead of using a fixed overlap: normal days cost 1 day of
-rows, and the window widens by itself only after a missed run.
+**The leaderboard is byte-identical at every floor.** The 50th-biggest sale of a
+week is ~$27,000, so nothing under $2,000 ever appears on it. Lowering the floor
+only buys aggregate depth further down-market.
 
-To cut spend hard, set `TIER=top` ($2,000+ only, ~$56/mo). The leaderboard is
-**identical** — the 50th-biggest sale of the week is ~$27,000 — but medians and
-market GMV lose the low end, so pair it with a weekly `TIER=full` run.
+Raising the floor is **not** free sampling — it truncates the distribution and
+biases every median upward (Pokemon median $1,131 at $500+ vs $2,282 at
+$1,000+). That is why the floor is enforced a second time in the database: see
+`publish_floor` in `db/schema.sql`. Rows below it are stored but can never reach
+a published aggregate, so the site cannot show a median over a range it only
+partially collects.
+
+**Move the floor down to $500 when player value pages ship.** At $2,000+ only 17
+cards clear the n≥3 comps rule and 72 players have data; at $500+ it was 111
+players and far more comps. The SEO engine needs the tail; the homepage does not.
+Change `MIN_PRICE` in `render.yaml` **and** `publish_floor` in `db/schema.sql`,
+then re-run `db/schema.sql`.
 
 Do **not** use Render's free plans here: free Postgres **expires after 30 days**,
 and a free web service **sleeps after 15 minutes** with a ~1 minute cold start —
@@ -84,13 +92,15 @@ which would show visitors a loading page.
 1. Push this repo to GitHub.
 2. Render → **New → Blueprint** → select the repo. `render.yaml` creates the
    database, API and cron job.
-3. In the cron job's settings, set `APIFY_TOKEN`. Optionally set `TIER=top` to
-   cut Apify spend ~4x.
+3. In the cron job's settings, set `APIFY_TOKEN`. `MIN_PRICE` is already `2000`.
 4. Apply the schema once:
    ```bash
    psql "$DATABASE_URL" -f db/schema.sql
    ```
-5. Backfill the 21,766-row seed that ships with this repo:
+5. Backfill the 21,766-row seed that ships with this repo. It is $500+ data,
+   which is deliberate — it is already paid for, it feeds `/v1/search`, and it
+   is there if you ever drop the floor. The publish floor keeps it out of every
+   aggregate, so `/v1/stats` will correctly report 5,175 tracked, not 21,766:
    ```bash
    DATABASE_URL=... python3 etl/load.py --csv seed/sales_all.csv.gz
    ```
@@ -143,11 +153,12 @@ injection bug cannot write to the warehouse.
 `etl/refresh_daily.sh` runs **every day at 05:00 ET** (`0 9 * * *` UTC), so the
 homepage is current before US morning traffic:
 
-1. **Adaptive window** — queries how stale the DB is and scrapes exactly that far
-   back plus one day, clamped to 1–5 days. Normal day = 1 day of rows. After a
-   failed run it widens automatically. This is what makes daily cost the same as
-   weekly.
-2. `etl/scrape.py` — Apify, 10 category/price bands
+1. **Adaptive window** — `(days the DB is behind) + 2`, capped at 6. The `+2` is
+   load-bearing: eBay sales land around the clock, so at 09:00 UTC a sale dated
+   *today* has usually already landed, which would make the window 1 day and
+   permanently miss every sale completing after each run. With `+2`, yesterday is
+   always fully re-read and a missed run widens the next window automatically.
+2. `etl/scrape.py` — Apify, 6 category/price bands (disjoint by construction)
 3. `etl/load.py` — idempotent upsert on `item_id`, then `refresh_all_views()`
 4. `db/retention.sql` — prunes past 400 days, then `VACUUM ANALYZE` (the daily
    upsert churns rows; without this the trigram search and date scans degrade)
@@ -163,7 +174,7 @@ the front end can show a warning instead of silently rendering old prices.
 
 ### Growth and retention
 
-At ~3,100 sales/day the table grows ~1.1M rows and roughly 0.7 GB per year.
+At ~739 sales/day the table grows ~270k rows and roughly 0.2 GB per year.
 Render bills expandable storage at $0.30/GB. `db/retention.sql` keeps 400 days.
 **Raise that number, never lower it** — eBay only exposes ~90 days of sold data,
 so deleted history cannot be re-scraped.
@@ -183,8 +194,10 @@ so deleted history cannot be re-scraped.
 
 ## Known gaps
 
+- **Everything published is $2,000+.** That is a deliberate cost choice, not a
+  bug — but it must be labelled on the site. Say "tracked sales over $2,000".
 - **~17% of rows classify as `Unknown`** — titles with no team, player or sport
   keyword. Reduce by extending the player lists in `etl/classify.py`.
-- `mv_card_comps` only covers rows where a player was matched (~28% of rows),
-  because comps without a player identity are not useful.
+- `mv_card_comps` is thin at this floor (17 cards clear n≥3). Player value pages
+  need `MIN_PRICE=500`. Homepage modules do not.
 - Week-over-week columns stay `NULL` until two full weeks are loaded.

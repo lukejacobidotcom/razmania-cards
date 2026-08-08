@@ -9,10 +9,16 @@ API described below.
 
 ## 1. What the data is
 
-A warehouse of **eBay completed card sales over $500**, refreshed **every day at ~05:00 ET**.
+A warehouse of **eBay completed card sales over $2,000**, refreshed **every day at ~05:00 ET**.
 Covers baseball, football, hockey, basketball, soccer, WWE, Pokémon, One Piece,
-Magic and Yu-Gi-Oh. Current load: ~21,800 sales in a rolling 7-day window,
-~$31M of tracked volume.
+Magic and Yu-Gi-Oh. Current load: **~5,175 sales** in a rolling 7-day window,
+**~$20.5M** of tracked volume, ~739 new sales/day.
+
+⚠️ **The floor is $2,000, and every user-facing label must say so.** Write
+"biggest card sales over $2,000" / "tracked sales over $2,000", never "all card
+sales". The database physically cannot return an aggregate below $2,000 — the
+floor is enforced in a generated column — so you cannot accidentally publish one,
+but you CAN accidentally mislabel one. Don't.
 
 - **Postgres on Render**, all heavy aggregation pre-computed in materialized views
 - **FastAPI read API** — every endpoint reads a pre-built view, so responses are fast and cheap
@@ -36,7 +42,7 @@ publishes the seller's **asking price**, never what the buyer actually paid.
 
 The API already excludes them from every endpoint listed here — `/v1/leaderboard`,
 `/v1/comps`, `/v1/players/*` and all aggregates return **confirmed sales only**.
-You get 15,386 confirmed of 21,766 total.
+You get **3,815 confirmed of 5,175 tracked**.
 
 **Only `/v1/sales` can return them, and only if you pass `confirmed_only=false`.**
 If you ever do that, you must label those rows "asking price" in the UI. Never
@@ -71,7 +77,7 @@ runs daily at ~05:00 ET, so `days_stale` should normally be 0 or 1.
 
 ### `GET /v1/stats` — site-wide header numbers
 ```json
-{"total_sales":21766,"confirmed_sales":15386,"total_gmv":30941535.96,
+{"total_sales":5175,"confirmed_sales":3815,"total_gmv":20516849.46,
  "biggest_sale":576350.0,"first_date":"2026-07-28","last_date":"2026-08-03",
  "players_tracked":111,"generated_at":"2026-08-03T20:40:26Z"}
 ```
@@ -88,7 +94,7 @@ weeks are loaded** — handle null, do not render "NaN%" or "0%". Show "—".
 
 ### `GET /v1/leaderboard?vertical=&limit=&offset=` — BIGGEST SALES (7 days)
 ```json
-{"total":15386,"limit":2,"offset":0,"results":[
+{"total":3815,"limit":2,"offset":0,"results":[
  {"rank":1,"rank_in_vertical":1,"item_id":"236962688405",
   "title":"Pop 2 BGS 10 Rayquaza Gold Star 1st Ed - Clash of the Blue Sky 067/082 Pokemon",
   "vertical":"Pokemon","total_price":576350.0,"sold_date":"2026-07-29",
@@ -140,7 +146,7 @@ Raw rows for ad-hoc filtering. `confirmed_only` defaults to `true` — leave it.
 
 ### `GET /v1/health` — freshness gate, call before rendering prices
 ```json
-{"ok":true,"fresh":true,"last_sale":"2026-08-03","rows":21766,"days_stale":1,
+{"ok":true,"fresh":true,"last_sale":"2026-08-03","rows":5175,"days_stale":1,
  "last_successful_refresh":{"finished_at":"2026-08-03T20:40:23Z","status":"ok",
  "rows_inserted":0,"rows_updated":21766}}
 ```
@@ -228,10 +234,9 @@ full size in a grid.
 
 ## 7. Do NOT claim
 
-- **Do not claim complete coverage.** Several price bands hit a 3,000-row scrape
-  cap, so the low end ($500–900) is a recent-first sample. eBay does roughly
-  2,007 sports-card sales over $500 *per day*, so the true population is larger
-  than what is stored. Say "tracked sales", not "all sales".
+- **Do not claim complete coverage, and never omit the $2,000 floor.** Say
+  "tracked sales over $2,000", not "all card sales". Coverage at or above $2,000
+  is complete; below it there is nothing.
 - **Do not present medians as appraisals.** Say "market read", not "value".
 - **Do not show `Unknown` as a sport.**
 - **Do not average `avg_price`** into anything user-facing — use medians.
