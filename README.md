@@ -51,37 +51,68 @@ the site by accident.
 | Render Postgres | `basic-256mb` + 5 GB storage | **$7.50/mo** |
 | Render Web Service (API) | `starter` | **$7/mo** |
 | Render Cron (daily) | `starter`, ~15 min/day | **~$0.75/mo** |
-| Apify scrape | `MIN_PRICE=2000` | **~$111/mo** |
-| **Total** | | **~$126/mo** |
+| Apify scrape | `MIN_PRICE=2000`, tiered cadence | **~$68/mo** |
+| **Total** | | **~$83/mo** |
 
 ### Apify is the real cost — and it scales with rows, not runs
 
-Apify bills per row **returned**, not per run. The `item_id` upsert dedupes
-perfectly, but only *after* Apify has billed. So cadence is irrelevant and the
-only two levers are the **price floor** and the **window width**.
+Apify bills per row **returned**. The `item_id` upsert dedupes perfectly, but
+only *after* Apify has billed. Three levers exist: the **price floor**, the
+**window width**, and **how often each price range is scraped**.
 
-| `MIN_PRICE` | Sales/day | 2-day window | Apify/mo | What it buys |
+#### The measurement that set the config
+
+Every one of the **top 50 weekly sales came from the `$10,000+` slice** — and
+that slice is 9% of the volume:
+
+| Slice | Sales/day | Share | In the top 50? |
+|---|---|---|---|
+| **$10,000+** | 68 | 9% | **all 50** |
+| $5,000–9,999 | 134 | 18% | none |
+| $3,000–4,999 | 215 | 29% | none |
+| $2,000–2,999 | 323 | 44% | none |
+
+The other 91% only moves medians and GMV — and a median does not change
+materially between Tuesday and Wednesday.
+
+#### So the cadence is tiered
+
+| Slice | Cadence | Window | Rows/mo | Cost |
 |---|---|---|---|---|
-| **`2000` (current)** | 739 | 1,478 rows | **~$111** | complete leaderboard + $2,000+ medians |
-| `1000` | 1,477 | 2,954 rows | ~$222 | + medians down to $1,000 |
-| `500` | 3,109 | 6,218 rows | ~$466 | + medians down to $500, deep player comps |
+| `$10,000+` (`HOT_FLOOR`) | **daily** | 2 days | 4,080 | **$10/mo** |
+| `$2,000–9,999` | **weekly** (`TAIL_DOW`) | 8 days | 23,278 | **$58/mo** |
+| | | | | **$68/mo** |
 
-**The leaderboard is byte-identical at every floor.** The 50th-biggest sale of a
-week is ~$27,000, so nothing under $2,000 ever appears on it. Lowering the floor
-only buys aggregate depth further down-market.
+Flat daily-everything was **$111/mo**. Same rows collected, redundancy drops
+from **2.0x to 1.2x** — the saving is entirely from not re-buying yesterday's
+cheap rows, not from dropping data. **$43/mo, $525/yr.**
+
+Set `TAIL_DOW` above 6 to switch the tail off entirely: **~$10/mo**, leaderboard
+unchanged, no medians.
+
+#### Floor economics, if you ever move it
+
+| `MIN_PRICE` | Sales/day | Daily-everything | With tiered cadence |
+|---|---|---|---|
+| **2000 (current)** | 739 | $111/mo | **$68/mo** |
+| 1000 | 1,477 | $222/mo | ~$130/mo |
+| 500 | 3,109 | $466/mo | **~$279/mo** |
 
 Raising the floor is **not** free sampling — it truncates the distribution and
 biases every median upward (Pokemon median $1,131 at $500+ vs $2,282 at
-$1,000+). That is why the floor is enforced a second time in the database: see
-`publish_floor` in `db/schema.sql`. Rows below it are stored but can never reach
+$1,000+). That is why the floor is enforced a second time in the database as
+`publish_floor` in `db/schema.sql`: rows below it are stored but can never reach
 a published aggregate, so the site cannot show a median over a range it only
 partially collects.
 
-**Move the floor down to $500 when player value pages ship.** At $2,000+ only 17
-cards clear the n≥3 comps rule and 72 players have data; at $500+ it was 111
+**Move the floor to $500 when player value pages ship.** At $2,000+ only 17
+cards clear the n>=3 comps rule and 72 players have data; at $500+ it was 111
 players and far more comps. The SEO engine needs the tail; the homepage does not.
 Change `MIN_PRICE` in `render.yaml` **and** `publish_floor` in `db/schema.sql`,
-then re-run `db/schema.sql`.
+then re-run that file.
+
+Every scrape prints `COST: N rows x $0.0025 = $X` so a config regression that
+triples spend is visible in the first log line, not the monthly invoice.
 
 Do **not** use Render's free plans here: free Postgres **expires after 30 days**,
 and a free web service **sleeps after 15 minutes** with a ~1 minute cold start —
@@ -153,12 +184,16 @@ injection bug cannot write to the warehouse.
 `etl/refresh_daily.sh` runs **every day at 05:00 ET** (`0 9 * * *` UTC), so the
 homepage is current before US morning traffic:
 
-1. **Adaptive window** — `(days the DB is behind) + 2`, capped at 6. The `+2` is
-   load-bearing: eBay sales land around the clock, so at 09:00 UTC a sale dated
-   *today* has usually already landed, which would make the window 1 day and
-   permanently miss every sale completing after each run. With `+2`, yesterday is
-   always fully re-read and a missed run widens the next window automatically.
-2. `etl/scrape.py` — Apify, 6 category/price bands (disjoint by construction)
+1. **Adaptive window, per tier** — each tier tracks its own staleness from
+   `max(sold_date)` within its price range. Hot gets `behind + 2` (capped 6); the
+   `+2` is load-bearing, because eBay sales land around the clock and at 09:00 UTC
+   a sale dated *today* has usually already landed — a 1-day window would
+   permanently miss everything completing after each run. Tail gets `behind + 1`,
+   floored at 8 and capped at 9, and fires on `TAIL_DOW` **or** any day it has
+   drifted past 8 days stale, so a missed week self-heals.
+2. `etl/scrape.py` — Apify. 2 bands on a hot day, 6 more on tail day, disjoint by
+   construction. Retries 402/429/5xx with backoff and staggers starts, because a
+   burst of simultaneous run-starts is enough to make Apify reject the lot.
 3. `etl/load.py` — idempotent upsert on `item_id`, then `refresh_all_views()`
 4. `db/retention.sql` — prunes past 400 days, then `VACUUM ANALYZE` (the daily
    upsert churns rows; without this the trigram search and date scans degrade)
