@@ -27,6 +27,10 @@ NOTIFY = Path(__file__).resolve().parent
 os.environ.setdefault("DATABASE_URL", "postgres://fake")
 os.environ["ALERT_TO"] = "+15551234567,+15552345678,+15553456789"
 os.environ["SMS_VIA"] = "textbelt"
+# Hermetic: never inherit the operator's real cutoff or threshold from a shell
+# that happens to have sourced .env. The forward-only cases set them explicitly.
+os.environ.pop("ALERT_SINCE", None)
+os.environ.pop("MIN_ALERT_DOLLARS", None)
 
 # ---------------------------------------------------------------- fake Postgres
 STATE = {}
@@ -104,7 +108,7 @@ def ticket(rid, first, last, gross, status="confirmed", **qty):
          "email": "{}@example.com".format(first.lower()),
          "registration_status": status,
          "payment_status": {"id": 1, "value": "Paid"},
-         "individual_gross": gross}
+         "individual_gross": gross, "created_at": qty.pop("created_at", "")}
     for k, field in ids.items():
         n = qty.get(k)
         r[field] = ({"id": 55620600 + n, "value": str(n)} if n
@@ -113,13 +117,13 @@ def ticket(rid, first, last, gross, status="confirmed", **qty):
 
 
 def booth(rid, first, last, company, gross, front=None, standard=None,
-          premium=None, status="confirmed"):
+          premium=None, status="confirmed", created_at=""):
     """A registrant on 372565. Booth counts are bare strings, or ''."""
     return {"id": rid, "first_name": first, "last_name": last,
             "company": company, "email": "{}@vendor.com".format(first.lower()),
             "registration_status": status,
             "payment_status": {"id": 1, "value": "Paid"},
-            "individual_gross": gross,
+            "individual_gross": gross, "created_at": created_at,
             "c_8978574": str(front) if front else "",
             "c_8978579": str(standard) if standard else "",
             "c_8978580": str(premium) if premium else "",
@@ -183,6 +187,43 @@ case("8b. vendor whose company is 'N/A' -> falls back to the person", TIX,
      [VTM, CHEESE, booth(25, "Lin", "Zhang", "N/A", "207.00", standard=1)])
 
 assert case("9. broken sweep must NOT report a wave of refunds", [], []) == 1
+
+# --------------------------------------------------------------- forward only
+# The real protection against announcing history is --seed. This is the second
+# layer, for when the state table is empty because someone rebuilt the database:
+# a sale created before the cutoff must be recorded and stay silent even then,
+# and the run must not abort waiting for a human to notice.
+STATE.clear()
+watch.ALERT_SINCE = "2026-08-20 12:00:00"
+
+OLD_T = [ticket(30, "Last", "Week", "20.70", adult=2, created_at="2026-08-14 09:00:00"),
+         ticket(31, "This", "Morning", "47.00", vip=1, created_at="2026-08-20 08:15:00")]
+OLD_B = [booth(32, "Historic", "Vendor", "Old Cards", "207.00", standard=1,
+               created_at="2026-08-11 10:00:00")]
+NEW_B = booth(33, "Fresh", "Vendor", "New Cards", "517.50", premium=2,
+              created_at="2026-08-20 14:30:00")
+
+# Count texts rather than state: --dry-run deliberately writes no state, so the
+# only thing worth asserting here is how many messages would have gone out.
+SENT = []
+_send = watch.sms.send
+watch.sms.send = lambda body, to=None, dry_run=False: (
+    SENT.append(body) or _send(body, to=to, dry_run=dry_run))
+
+SENT.clear()
+rc = case("10. wiped database, cutoff set -> history silent, no abort",
+          NOISE + OLD_T, OLD_B)
+assert rc == 0, rc
+assert not SENT, "history was announced: {}".format(SENT)
+
+SENT.clear()
+rc = case("11. a genuinely new sale after the cutoff -> texts",
+          NOISE + OLD_T, OLD_B + [NEW_B])
+assert rc == 0, rc
+assert len(SENT) == 1 and "New Cards" in SENT[0], SENT
+print("   texted exactly once:", SENT[0])
+watch.sms.send = _send
+watch.ALERT_SINCE = ""
 
 print("\nformatting:")
 for c in [2070, 51750, 165600, 19500, 2840000]:

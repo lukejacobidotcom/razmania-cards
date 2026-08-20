@@ -65,6 +65,23 @@ BATCH = os.environ.get("ALERT_BATCH", "1") != "0"
 # pass quietly - they are still recorded, and still counted in the running
 # total, they just do not buzz anyone.
 MIN_ALERT = int(round(float(os.environ.get("MIN_ALERT_DOLLARS", "0")) * 100))
+# FORWARD ONLY. A registrant created before this stamp is recorded and counted
+# but never announced, however it turns up. --seed already covers the normal
+# case; this covers the abnormal ones - a rebuilt database, a restored backup, a
+# second deployment pointed at a fresh schema - where the state table is empty
+# and every historical sale would otherwise look brand new.
+#
+# Format is "YYYY-MM-DD HH:MM:SS" and the comparison is a plain string compare,
+# which that format sorts correctly under - no date parsing involved.
+#
+# SET IT IN UTC. Swoogo stamps created_at in UTC, NOT in the event timezone.
+# Measured, not assumed: the newest registrant read back 27 minutes before
+# current UTC, and 213 minutes into the FUTURE against US/Eastern. Get this
+# wrong by four hours in one direction and a morning of history gets
+# announced; wrong in the other and four hours of real sales go silent.
+# "T" is accepted and normalised because an unquoted value with a space in it
+# is silently mangled by a shell sourcing a .env - which happened here.
+ALERT_SINCE = os.environ.get("ALERT_SINCE", "").strip().replace("T", " ")
 FIRST_RUN_GUARD = int(os.environ.get("FIRST_RUN_GUARD", "5"))
 SMS_LIMIT = 160          # one Textbelt credit; past this it costs two
 
@@ -211,7 +228,7 @@ def sweep(sw, ev):
                                    r.get("last_name", "")).strip(),
             "company": clean_company(r),
             "email": r.get("email") or "", "items": describe(r, ev),
-            "cents": c, "reg": r,
+            "cents": c, "reg": r, "created_at": r.get("created_at") or "",
         }
     return out
 
@@ -313,6 +330,28 @@ def main():
                 "email": old["email"] or "", "cents": 0,
                 "was": int(old["cents"])}))
 
+    # FORWARD ONLY. Anything created before the cutoff is not news, whatever the
+    # state table says. Filtered before the first-run guard on purpose: with a
+    # cutoff set, a wiped database quietly re-records history instead of
+    # aborting and waiting for someone to notice and run --seed.
+    if ALERT_SINCE and not args.seed:
+        # A MISSING created_at counts as new, not as history. Empty string sorts
+        # before every real stamp, so the lazy comparison would silently bury a
+        # sale Swoogo declined to date - and a swallowed sale is the one failure
+        # this whole job exists to prevent. Better a duplicate than a silence.
+        backfill = [c for c in changes
+                    if c[1] == "new" and c[2].get("created_at")
+                    and c[2]["created_at"] < ALERT_SINCE]
+        if backfill:
+            print("{} sale(s) predate ALERT_SINCE={} - recorded, not texted"
+                  .format(len(backfill), ALERT_SINCE))
+            changes = [c for c in changes
+                       if c[0] not in {x[0] for x in backfill}]
+            with conn.cursor() as cur:
+                for rid, _kind, row in backfill:
+                    if not args.dry_run:
+                        store(cur, rid, row)
+
     if args.seed:
         with conn.cursor() as cur:
             for rid, row in live.items():
@@ -334,15 +373,13 @@ def main():
               file=sys.stderr)
         return 3
 
-    # Below the threshold: recorded, counted, not texted. State is still written
-    # so a quiet sale cannot resurface as a loud one after the threshold moves.
-    quiet = [c for c in changes if 0 < c[2]["cents"] < MIN_ALERT]
-    changes = [c for c in changes if c not in quiet]
-    if quiet:
+    small = [c for c in changes if 0 < c[2]["cents"] < MIN_ALERT]
+    if small:
         print("{} sale(s) below the {} alert threshold - recorded, not texted"
-              .format(len(quiet), usd(MIN_ALERT)))
+              .format(len(small), usd(MIN_ALERT)))
+        changes = [c for c in changes if c[0] not in {x[0] for x in small}]
         with conn.cursor() as cur:
-            for rid, _kind, row in quiet:
+            for rid, _kind, row in small:
                 if not args.dry_run:
                     store(cur, rid, row)
     if not changes:

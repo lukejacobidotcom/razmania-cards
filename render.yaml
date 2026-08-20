@@ -109,6 +109,15 @@ services:
                                # SINGLE summary text. This is the difference
                                # between a busy day costing 3 credits and 90.
                                # Set to "0" for one text per sale.
+      - key: ALERT_SINCE
+        value: "2026-08-20 14:02:34"
+                               # FORWARD ONLY. A registrant created before this
+                               # is recorded and counted but never announced.
+                               # --seed already covers the normal case; this
+                               # covers a rebuilt database, where every historic
+                               # sale would otherwise look brand new.
+                               # IN UTC: Swoogo stamps created_at in UTC,
+                               # not in the event timezone. Measured.
       - key: FIRST_RUN_GUARD
         value: "5"             # max sales an unseeded run may announce before it
                                # aborts and tells you to --seed instead
