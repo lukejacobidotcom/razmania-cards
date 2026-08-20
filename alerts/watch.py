@@ -166,6 +166,26 @@ def paid_state(reg):
     return (p or "").strip()
 
 
+FOLD = {"’": "'", "‘": "'", "“": '"', "”": '"',
+        "–": "-", "—": "-", "…": "...", " ": " "}
+
+
+def ascii_only(text):
+    """Fold a name or company down to plain ASCII.
+
+    Keeping our own wording ASCII is not enough when the buyer's company is
+    "Y.G.’s Card Vault": one curly apostrophe costs a second credit on every
+    recipient. Common punctuation is transliterated, accents are stripped to
+    their base letter, and anything left over is dropped rather than shipped as
+    a question mark.
+    """
+    import unicodedata
+    for bad, good in FOLD.items():
+        text = text.replace(bad, good)
+    text = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in text if ord(c) < 128)
+
+
 def trim(body, email):
     """Drop the email rather than pay a second Textbelt credit for one line."""
     if len(body) <= SMS_LIMIT or not email:
@@ -181,14 +201,15 @@ def compose(kind, row, booked):
     if kind == "increase":
         head = "{} added to their order: now {}".format(row["who"], " - ".join(bits))
     elif kind == "decrease":
-        return "{}: heads up, {} dropped from {} to {}. Check Swoogo.".format(
-            ev["prefix"], row["who"], usd(row["was"]), usd(row["cents"]))
+        return ascii_only(
+            "{}: heads up, {} dropped from {} to {}. Check Swoogo.".format(
+                ev["prefix"], row["who"], usd(row["was"]), usd(row["cents"])))
     else:
         head = "{} bought {}".format(row["who"], " - ".join(bits))
     tail = " | ".join(x for x in [paid_state(row["reg"]), row["email"]] if x)
     body = "{}: {}{} | {} booked".format(
         ev["prefix"], head, (" | " + tail) if tail else "", usd(booked, short=True))
-    return trim(body, row["email"])
+    return ascii_only(trim(body, row["email"]))
 
 
 def compose_batch(rows, booked):
@@ -210,7 +231,7 @@ def compose_batch(rows, booked):
         listed += 1
     if listed < len(rows):
         body += "; +{} more".format(len(rows) - listed)
-    return body + " | {} booked".format(usd(booked, short=True))
+    return ascii_only(body + " | {} booked".format(usd(booked, short=True)))
 
 
 def sweep(sw, ev):
@@ -246,9 +267,18 @@ def store(cur, rid, row):
          row["email"], row["items"], row["cents"]))
 
 
-def record(cur, rid, kind, row, body, results):
+def record(cur, rid, kind, row, body, results, dry_run=False):
+    """Print each send result and, unless this is a rehearsal, audit it.
+
+    A --dry-run MUST NOT write to sales_alerts. It did once, and the table then
+    showed three ok=True rows for texts that were never sent - which is exactly
+    the lie this table exists to prevent. Caught by a Textbelt balance that had
+    not moved.
+    """
     for to, ok, detail in results:
         print("  {:>18}  {}  {}".format(to, "ok" if ok else "FAILED", detail))
+        if dry_run:
+            continue
         cur.execute(
             """INSERT INTO sales_alerts
                    (registrant_id, kind, cents_from, cents_to, body, recipient,
@@ -392,7 +422,8 @@ def main():
         results = sms.send(body, dry_run=args.dry_run)
         print("[batch x{}] {}".format(len(rows), body))
         with conn.cursor() as cur:
-            delivered = record(cur, None, "batch", None, body, results)
+            delivered = record(cur, None, "batch", None, body, results,
+                               dry_run=args.dry_run)
             if args.dry_run:
                 return 0
             if not delivered:
@@ -412,7 +443,8 @@ def main():
         results = sms.send(body, dry_run=args.dry_run)
         print("[{}] {}".format(kind, body))
         with conn.cursor() as cur:
-            delivered = record(cur, rid, kind, row, body, results)
+            delivered = record(cur, rid, kind, row, body, results,
+                               dry_run=args.dry_run)
             if args.dry_run:
                 continue
             if not delivered:
