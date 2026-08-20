@@ -100,8 +100,9 @@ only helps when two sales land inside the same poll.
 
 ### 1. Swoogo API credentials — one half still missing
 
-Swoogo → **Account Hub → API → API Keys**. A key comes in two parts, a consumer
-key *and* a consumer secret, and both are required: the token endpoint answers
+In Swoogo, click **your name in the top right → My Profile → API Credentials**.
+The pair is listed there as *Consumer Key (API Key)* and *Consumer Secret (API
+Secret)*. Both are required: the token endpoint answers
 
 ```
 401 {"message": "You have provided invalid API details."}
@@ -110,9 +111,12 @@ key *and* a consumer secret, and both are required: the token endpoint answers
 to the key on its own — tested against the live account, not assumed.
 
 `SWOOGO_KEY` is set. **`SWOOGO_SECRET` is still blank in `.env`** and the poller
-cannot read a single registrant until it is filled. If the secret was only shown
-once at creation, delete the key and make a new one; both halves are displayed
-together on the new one.
+cannot read a single registrant until it is filled.
+
+The credentials are **per Swoogo user**, not per event, so they belong to
+whoever is signed in. If the page is empty there is a *Regenerate Consumer Key
+And Secret* button — but pressing it **invalidates the existing pair**, so check
+nothing else is using it first.
 
 ### 2. Textbelt
 

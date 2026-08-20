@@ -49,7 +49,7 @@ class Swoogo:
         self.secret = secret or os.environ.get("SWOOGO_SECRET", "")
         if not self.key or not self.secret:
             raise SwoogoError("set SWOOGO_KEY and SWOOGO_SECRET "
-                              "(Swoogo > Account Hub > API > API Keys)")
+                              "(Swoogo > your name, top right > My Profile > API Credentials)")
         self._tok = None
         self._exp = 0.0
 
