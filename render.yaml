@@ -67,3 +67,57 @@ services:
       # The scrape window is NOT configurable here on purpose. refresh_daily.sh
       # derives it from max(sold_date) so a missed run automatically widens the
       # next one. Hard-coding a window is how you get a permanent daily gap.
+
+  # SALES -> SMS. Polls both RazMania Swoogo events and texts ALERT_TO whenever
+  # a confirmed registration's order total changes: attendee tickets and the
+  # Sponsor a Kid field on 370376, exhibitor booths on 372565. What counts as a
+  # sale, and what each field is called, lives in alerts/config.py.
+  #
+  # Every 5 minutes because Swoogo has no outbound webhook: there is no way to
+  # be pushed a registration, so the only question is how stale the alert is
+  # allowed to be. One poll is two HTTP calls and a few seconds of runtime, so
+  # this bills at roughly a quarter a month. Tighten to "* * * * *" if a
+  # five-minute lag ever matters; nothing else has to change.
+  #
+  # FIRST DEPLOY: run `python3 alerts/watch.py --seed` once from a Render shell.
+  # Both events ALREADY have hundreds of paid registrants; seeding records them
+  # WITHOUT texting. The job refuses to send on an unseeded database rather than
+  # blowing the whole Textbelt balance announcing history.
+  - type: cron
+    name: razmania-sale-alerts
+    runtime: python
+    plan: starter              # billed per second; ~5s per run => well under $1/mo
+    schedule: "*/5 * * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 alerts/watch.py
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: razmania-db, property: connectionString }
+      - key: SWOOGO_KEY
+        sync: false            # Swoogo > your name > My Profile > API Credentials
+      - key: SWOOGO_SECRET
+        sync: false            # the key alone is rejected - both halves needed
+      - key: ALERT_TO
+        sync: false            # comma-separated numbers, any format
+      - key: TEXTBELT_KEY
+        sync: false            # textbelt.com. ONE CREDIT PER RECIPIENT per text,
+                               # so three phones burns three an alert. Check the
+                               # balance with textbelt.com/quota/<key> - it
+                               # returns success:false, not an error, at zero.
+      - key: ALERT_BATCH
+        value: "1"             # 1 = several sales found in one poll go out as a
+                               # SINGLE summary text. This is the difference
+                               # between a busy day costing 3 credits and 90.
+                               # Set to "0" for one text per sale.
+      - key: ALERT_SINCE
+        value: "2026-08-20 14:02:34"
+                               # FORWARD ONLY. A registrant created before this
+                               # is recorded and counted but never announced.
+                               # --seed already covers the normal case; this
+                               # covers a rebuilt database, where every historic
+                               # sale would otherwise look brand new.
+                               # IN UTC: Swoogo stamps created_at in UTC,
+                               # not in the event timezone. Measured.
+      - key: FIRST_RUN_GUARD
+        value: "5"             # max sales an unseeded run may announce before it
+                               # aborts and tells you to --seed instead
