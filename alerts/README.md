@@ -196,6 +196,65 @@ That second query is also the honest source for the **kids sponsored** counter
 on the Sponsor a Kid page, which is currently a hidden placeholder — filter
 `items LIKE '%Sponsor a Kid%'`.
 
+## Operations and hardening
+
+Everything here exists because of a failure this service actually had, or one it
+was one bad afternoon away from.
+
+### When it breaks, find out in one command
+
+```bash
+python3 alerts/watch.py --doctor
+```
+
+Prints the last ten runs with exit codes, how long since the last *successful*
+one, how many sales are tracked, the last few alerts, and whether Swoogo and
+Textbelt answer. Every run is now recorded in `alert_runs` whether it succeeds
+or not — on the day this shipped, the job failed every five minutes for an hour
+and the only evidence was a text that never arrived.
+
+### Turn on Render's own failure notifications
+
+**Do this.** A run that dies at `import psycopg2` — which is exactly what
+happened on the Python 3.14 default — never reaches a line of this code, so it
+cannot text you, log a run, or fail gracefully. Only the platform can see that.
+Render service → **Settings → Notifications** → alert on failure.
+
+### The guards, and what each one is protecting you from
+
+| | |
+|---|---|
+| **Advisory lock** | Two runs cannot overlap. A sweep that overruns its five-minute slot would otherwise have the next tick read the same un-recorded sale and text it twice. Held by the connection, released however the process dies. |
+| **Shrink guard** | A sweep returning far fewer sales than are tracked is treated as a bad read, not as mass refunds. Truncated pagination would otherwise text every buyer "dropped to $0". Suppresses refunds only — new sales still alert. `SHRINK_GUARD` (0.2) and `SHRINK_FLOOR` (20). |
+| **First-run guard** | An unseeded database will not announce history. Exit 3. |
+| **Forward-only cutoff** | `ALERT_SINCE`, in **UTC**. Belt and braces on top of seeding. |
+| **Swoogo retries** | 5xx and network errors retried three times with backoff. A 502 used to cost a whole poll cycle; 4xx is not retried because a 401 stays a 401. |
+| **Low-credit warning** | One text when the balance crosses `TEXTBELT_LOW_QUOTA`, one at empty, then silence until a top-up re-arms it. A warning that repeats every five minutes is itself the outage. |
+| **Startup banner** | Every run logs which database and which events it is talking to. Written after most of a day was spent verifying a database in Ohio while the cron wrote to one in Oregon. |
+| **Masked numbers** | Phone numbers appear as `248***0141` in logs. |
+
+### Failure semantics
+
+- **A run that texts nobody records nothing.** The next run retries rather than
+  marking a sale announced. Better a duplicate than a silence.
+- **`--dry-run` writes nothing at all** — not state, not audit rows. It once
+  wrote `ok=true` rows into `sales_alerts` for texts that were never sent, which
+  is precisely the lie that table exists to prevent. Caught by a Textbelt balance
+  that had not moved.
+- **Unexpected exceptions** are caught, logged with a traceback, and recorded on
+  the run row with the exception type and message.
+
+### Two things still worth doing
+
+- **Move off `psycopg2` to `psycopg` 3.** The current pin exists because
+  `psycopg2-binary` 2.9.9 has no wheels past Python 3.12, and Render's default is
+  now 3.14. `.python-version` holds it at 3.12; that is a stay of execution, not
+  a fix, and it applies to `api/` and `etl/` too.
+- **Reconcile the two databases.** `.env` points at an Ohio instance; the Render
+  services run in Oregon. The alert tables do not join to anything, so alerts are
+  correct either way, but any hand-run verification against the wrong one is
+  fiction.
+
 ## Known limits
 
 - **Up to five minutes late.** Inherent to polling.

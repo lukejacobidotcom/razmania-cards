@@ -44,3 +44,32 @@ CREATE TABLE IF NOT EXISTS sales_alerts (
 );
 
 CREATE INDEX IF NOT EXISTS sales_alerts_sent_idx ON sales_alerts (sent_at DESC);
+
+-- ---------------------------------------------------------------- operations
+-- One row per run. Without this the only evidence the job is alive is a text
+-- that did not arrive, which is how today went: the service failed every five
+-- minutes for an hour on a psycopg2/Python 3.14 import error and nothing said
+-- so. `--doctor` reads this.
+CREATE TABLE IF NOT EXISTS alert_runs (
+    id           BIGSERIAL PRIMARY KEY,
+    started_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at  TIMESTAMPTZ,
+    ok           BOOLEAN,
+    exit_code    INTEGER,
+    sales_count  INTEGER,
+    booked_cents BIGINT,
+    alerts_sent  INTEGER NOT NULL DEFAULT 0,
+    note         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS alert_runs_started_idx ON alert_runs (started_at DESC);
+
+-- Tiny key/value scratchpad, used to make warnings FIRE ONCE rather than every
+-- five minutes forever. A low-credit warning that repeats 288 times a day is
+-- itself the outage.
+CREATE TABLE IF NOT EXISTS alert_state (
+    k          TEXT PRIMARY KEY,
+    v          TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+

@@ -35,17 +35,21 @@ os.environ.pop("MIN_ALERT_DOLLARS", None)
 # ---------------------------------------------------------------- fake Postgres
 STATE = {}
 ALERTS = []
+RUNS = []
+LOCK_HELD = []
+LOCK_FAIL = False
 
 
 class FakeCur:
     def __init__(self, dict_rows=False):
-        self.dict_rows, self.rows = dict_rows, []
+        self.dict_rows, self.rows, self.one = dict_rows, [], None
 
     def __enter__(self): return self
     def __exit__(self, *a): return False
 
     def execute(self, sql, params=()):
         s = " ".join(sql.split())
+        self.one = None
         if s.startswith("SELECT registrant_id"):
             self.rows = [dict(registrant_id=k, name=v["name"],
                               company=v["company"], email=v["email"],
@@ -58,12 +62,26 @@ class FakeCur:
             STATE.pop(params[0], None)
         elif "INSERT INTO sales_alerts" in s:
             ALERTS.append(params)
+        # --- operations tables -------------------------------------------
+        elif "pg_try_advisory_lock" in s:
+            LOCK_HELD.append(1)
+            self.one = [not LOCK_FAIL]
+        elif "INSERT INTO alert_runs" in s:
+            RUNS.append({})
+            self.one = [len(RUNS)]
+        elif "UPDATE alert_runs" in s:
+            RUNS[-1] = {"code": params[1], "sent": params[2], "note": params[5]}
+        elif "current_database" in s:
+            self.one = ["fake_db"]
+        elif "alert_state" in s:
+            self.one = [False]        # nothing ever warned recently, in tests
         elif "CREATE TABLE" in s or "CREATE INDEX" in s:
             pass
         else:
             raise AssertionError("unhandled SQL: " + s[:120])
 
     def fetchall(self): return self.rows
+    def fetchone(self): return self.one
 
 
 class FakeConn:
@@ -224,6 +242,41 @@ assert len(SENT) == 1 and "New Cards" in SENT[0], SENT
 print("   texted exactly once:", SENT[0])
 watch.sms.send = _send
 watch.ALERT_SINCE = ""
+
+# ------------------------------------------------------- operational guards
+# A sweep returning far fewer sales than we track is far likelier to be a
+# truncated read than a wave of refunds. Texting "dropped to $0" at four
+# customers because Swoogo paginated badly is worse than saying nothing.
+STATE.clear()
+watch.ALERT_SINCE = ""
+watch.SHRINK_FLOOR = 3          # the real floor is 20; these fixtures are small
+watch.sms.send = lambda body, to=None, dry_run=False: (
+    SENT.append(body) or _send(body, to=to, dry_run=dry_run))
+case("12a. seed six sales", TIX, BOOTHS, ("--seed",))
+assert len(STATE) == 6, STATE
+
+SENT.clear()
+rc = case("12b. sweep truncates to 2 of 6 -> refunds SUPPRESSED",
+          NOISE + [JANE], [MEDIA])
+assert rc == 0, rc
+assert not SENT, "reported refunds off a truncated sweep: {}".format(SENT)
+
+# A genuine refund, with the rest of the sweep intact, must still fire.
+SENT.clear()
+rc = case("12c. one real refund, healthy sweep -> still reported",
+          NOISE + [JANE, ACME, KIM], [MEDIA, VTM])
+assert rc == 0 and len(SENT) == 1 and "dropped" in SENT[0], SENT
+print("   reported:", SENT[0])
+watch.SHRINK_FLOOR = 20
+
+# Two runs must never overlap: the second would re-read the same un-recorded
+# sale and text it a second time.
+LOCK_FAIL = True
+SENT.clear()
+rc = case("13. a concurrent run cannot double-send",
+          TIX + [ticket(40, "Overlap", "Victim", "47.00", vip=1)], BOOTHS)
+assert rc == 0 and not SENT, SENT
+LOCK_FAIL = False
 
 print("\nformatting:")
 for c in [2070, 51750, 165600, 19500, 2840000]:

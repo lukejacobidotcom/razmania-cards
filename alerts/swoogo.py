@@ -31,16 +31,38 @@ class SwoogoError(RuntimeError):
     pass
 
 
+RETRIES = int(os.environ.get("SWOOGO_RETRIES", "3"))
+BACKOFF = (1, 4, 10)          # seconds; well inside a five-minute cron slot
+
+
 def _request(url, data=None, headers=None, method=None):
-    req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            return r.status, json.loads(r.read().decode("utf-8") or "{}")
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", "replace")[:500]
-        return e.code, {"_error": body}
-    except urllib.error.URLError as e:
-        raise SwoogoError(f"network error calling {url}: {e.reason}") from e
+    """One HTTP call, retried on the failures that are worth retrying.
+
+    A blip - a 502, a reset connection, a slow DNS answer - used to cost the
+    whole poll. The next run five minutes later would recover, so nothing was
+    lost, but a sale sat unannounced for ten minutes instead of five for no
+    good reason. 5xx and network errors are retried; 4xx are not, because a 401
+    or a 404 will still be a 401 or a 404 in four seconds.
+    """
+    last = None
+    for attempt in range(RETRIES):
+        req = urllib.request.Request(url, data=data, headers=headers or {},
+                                     method=method)
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                return r.status, json.loads(r.read().decode("utf-8") or "{}")
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", "replace")[:500]
+            if e.code < 500:
+                return e.code, {"_error": body}
+            last = f"HTTP {e.code}: {body[:200]}"
+        except urllib.error.URLError as e:
+            last = f"network error: {e.reason}"
+        except (TimeoutError, OSError) as e:
+            last = f"socket error: {e}"
+        if attempt < RETRIES - 1:
+            time.sleep(BACKOFF[min(attempt, len(BACKOFF) - 1)])
+    raise SwoogoError(f"{url} failed after {RETRIES} attempts - {last}")
 
 
 class Swoogo:

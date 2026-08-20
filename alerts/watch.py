@@ -42,6 +42,8 @@ WHY --seed EXISTS, AND WHY THE FIRST RUN REFUSES TO SEND
 import argparse
 import os
 import sys
+import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg2
@@ -84,6 +86,14 @@ MIN_ALERT = int(round(float(os.environ.get("MIN_ALERT_DOLLARS", "0")) * 100))
 ALERT_SINCE = os.environ.get("ALERT_SINCE", "").strip().replace("T", " ")
 FIRST_RUN_GUARD = int(os.environ.get("FIRST_RUN_GUARD", "5"))
 SMS_LIMIT = 160          # one Textbelt credit; past this it costs two
+# A sweep returning far fewer sales than we track is treated as a bad read, not
+# as mass refunds. Only kicks in once there is enough history for the ratio to
+# mean anything.
+SHRINK_GUARD = float(os.environ.get("SHRINK_GUARD", "0.2"))
+SHRINK_FLOOR = int(os.environ.get("SHRINK_FLOOR", "20"))
+STALE_HOURS = int(os.environ.get("STALE_HOURS", "6"))
+LOCK_KEY = 728_411_903        # any fixed int; scopes the advisory lock
+SENT_THIS_RUN = []
 
 
 def cents(value):
@@ -287,36 +297,13 @@ def record(cur, rid, kind, row, body, results, dry_run=False):
             (rid, kind, row.get("was") if row else None,
              row.get("cents") if row else None, body, to, ok,
              None if ok else detail))
+    if not dry_run:
+        SENT_THIS_RUN.extend(to for to, ok, _ in results if ok)
     return any(ok for _, ok, _ in results)
 
 
-def main():
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dry-run", action="store_true", help="print texts, send none")
-    ap.add_argument("--seed", action="store_true",
-                    help="record every existing sale without texting")
-    ap.add_argument("--test", action="store_true",
-                    help="send one sample text to ALERT_TO and exit")
-    args = ap.parse_args()
-
-    if args.test:
-        for to, ok, detail in sms.send(
-                "RazMania test: this is where a sale alert lands.",
-                dry_run=args.dry_run):
-            print("  {:>18}  {}  {}".format(to, "ok" if ok else "FAILED", detail))
-        return 0
-
-    if not sms.recipients():
-        print("ALERT_TO is empty - nobody to text.", file=sys.stderr)
-        return 2
-
-    # Looked up here, not at import, so --test needs nothing but ALERT_TO.
-    conn = psycopg2.connect(os.environ["DATABASE_URL"])
-    conn.autocommit = True
-    with conn.cursor() as cur:
-        cur.execute((Path(__file__).resolve().parent / "schema.sql").read_text())
-
+def poll(conn, args):
+    """One polling cycle. Returns a process exit code."""
     # ------------------------------------------------------------- read Swoogo
     live = {}
     try:
@@ -342,16 +329,31 @@ def main():
         cur.execute("SELECT registrant_id, name, company, email, cents FROM sales_seen")
         seen = {int(r["registrant_id"]): r for r in cur.fetchall()}
 
+    # A sweep that suddenly sees far fewer sales than we are tracking is far
+    # more likely to be a truncated read than a stampede of refunds. Swoogo
+    # pagination bailing early, a partial outage, an event archived by mistake -
+    # any of those would otherwise text every buyer's name with "dropped to $0".
+    # Growth is never suspicious; only a large drop is.
+    refunds_ok = True
+    if len(seen) >= SHRINK_FLOOR and len(live) < len(seen) * (1 - SHRINK_GUARD):
+        refunds_ok = False
+        print("REFUSING to report refunds: swept {} paid sales but {} are "
+              "tracked, a {:.0f}% drop. That is more likely a truncated read "
+              "than {} refunds. New sales still alert normally."
+              .format(len(live), len(seen),
+                      100 * (1 - len(live) / max(1, len(seen))),
+                      len(seen) - len(live)), file=sys.stderr)
+
     # ---------------------------------------------------------------- diff it
     changes = []
     for rid, row in live.items():
         was = int(seen[rid]["cents"]) if rid in seen else 0
         if row["cents"] > was:
             changes.append((rid, "new" if was == 0 else "increase", dict(row, was=was)))
-        elif row["cents"] < was:
+        elif row["cents"] < was and refunds_ok:
             changes.append((rid, "decrease", dict(row, was=was)))
     for rid, old in seen.items():
-        if rid not in live and int(old["cents"]) > 0:
+        if rid not in live and int(old["cents"]) > 0 and refunds_ok:
             changes.append((rid, "decrease", {
                 "event_id": 0, "kind": "", "reg": {}, "items": "",
                 "who": ("{} ({})".format(old["company"], old["name"]).strip()
@@ -458,6 +460,213 @@ def main():
             else:
                 store(cur, rid, row)
     return 0
+
+
+# ============================================================================
+# Operations. None of this changes what gets texted; it changes how fast a
+# human finds out when nothing does. Every piece here exists because of a
+# failure this service actually had, or one it was one bad afternoon away from.
+# ============================================================================
+
+def mask(phone):
+    """+15551234567 -> +1555***4567. Logs get pasted around; numbers should not."""
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    return phone if len(digits) < 7 else "{}***{}".format(phone[:-7], phone[-4:])
+
+
+def kv_set(conn, key, value):
+    with conn.cursor() as cur:
+        cur.execute("""INSERT INTO alert_state (k, v) VALUES (%s, %s)
+                       ON CONFLICT (k) DO UPDATE
+                           SET v = EXCLUDED.v, updated_at = now()""",
+                    (key, str(value)))
+
+
+def warned_recently(conn, key, hours):
+    """True if this warning already went out inside the window.
+
+    Every operational text goes through here. A warning that repeats every five
+    minutes is not a warning, it is the outage.
+    """
+    with conn.cursor() as cur:
+        cur.execute("""SELECT updated_at > now() - (%s || ' hours')::interval
+                         FROM alert_state WHERE k = %s""", (str(hours), key))
+        row = cur.fetchone()
+    return bool(row and row[0])
+
+
+def banner(conn):
+    """Say out loud what this run is about to talk to.
+
+    Written after most of a day was spent verifying a database in Ohio while
+    the cron was writing to one in Oregon. One line in the log would have
+    caught that in seconds instead of hours.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT current_database()")
+        db = cur.fetchone()[0]
+    raw = os.environ.get("DATABASE_URL", "")
+    host = raw.split("@")[-1].split("/")[0] if "@" in raw else "?"
+    print("db={} @ {}".format(db, host))
+    print("events={} cutoff={} min_alert={} batch={} via={} to={}".format(
+        [e["id"] for e in config.EVENTS], ALERT_SINCE or "(none)",
+        usd(MIN_ALERT), "on" if BATCH else "off", sms.VIA,
+        ",".join(mask(r) for r in sms.recipients())))
+
+
+def start_run(conn):
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO alert_runs DEFAULT VALUES RETURNING id")
+        return cur.fetchone()[0]
+
+
+def finish_run(conn, run_id, code, sales=None, booked=None, note=None):
+    with conn.cursor() as cur:
+        cur.execute("""UPDATE alert_runs
+                          SET finished_at = now(), ok = %s, exit_code = %s,
+                              alerts_sent = %s, sales_count = %s,
+                              booked_cents = %s, note = %s
+                        WHERE id = %s""",
+                    (code == 0, code, len(SENT_THIS_RUN), sales, booked,
+                     note, run_id))
+
+
+def check_credits(conn, dry_run):
+    """Warn once when the Textbelt balance gets low, then shut up about it.
+
+    Credits running out is the silent killer: Textbelt answers HTTP 200 with
+    success:false, alerts simply stop, and the first sign is a sale nobody heard
+    about. One text at the threshold, one at empty, and the warning re-arms only
+    after a top-up.
+    """
+    if sms.VIA != "textbelt" or dry_run:
+        return
+    left = sms.quota()
+    if left is None:
+        return
+    print("textbelt credits: {}".format(left))
+    for threshold, key in ((0, "credits_empty"), (sms.LOW_QUOTA, "credits_low")):
+        if left <= threshold and not warned_recently(conn, key, 24):
+            sms.send("RazMania alerts: Textbelt credits {}. Sale texts stop at "
+                     "zero - top up at textbelt.com.".format(
+                         "EXHAUSTED" if threshold == 0
+                         else "down to {}".format(left)))
+            kv_set(conn, key, left)
+            return
+    if left > sms.LOW_QUOTA:          # topped up: let the warning fire again
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM alert_state WHERE k IN "
+                        "('credits_low', 'credits_empty')")
+
+
+def doctor(conn):
+    """Everything you want at 7am when no text arrived and you need to know why."""
+    banner(conn)
+    with conn.cursor() as cur:
+        cur.execute("""SELECT started_at, ok, exit_code, alerts_sent,
+                              coalesce(note, '')
+                         FROM alert_runs ORDER BY started_at DESC LIMIT 10""")
+        rows = cur.fetchall()
+        print("\nlast {} run(s):".format(len(rows)) if rows
+              else "\nNO RUNS RECORDED - this job has never completed a cycle")
+        for started, ok, code, sent, note in rows:
+            print("  {}  {}  exit={} sent={} {}".format(
+                started.strftime("%Y-%m-%d %H:%M:%S"),
+                "ok  " if ok else "FAIL", code, sent, note[:60]))
+        cur.execute("SELECT max(started_at) FROM alert_runs WHERE ok")
+        last = cur.fetchone()[0]
+        if last:
+            age = (datetime.now(timezone.utc) - last).total_seconds() / 3600.0
+            print("\nlast SUCCESSFUL run: {:.1f}h ago{}".format(
+                age, "   <-- STALE, the cron is not running" if age > STALE_HOURS
+                else ""))
+        else:
+            print("\nno successful run on record")
+        cur.execute("SELECT count(*), coalesce(sum(cents), 0) FROM sales_seen")
+        n, total = cur.fetchone()
+        print("tracked: {} sales, {} booked".format(n, usd(int(total))))
+        cur.execute("""SELECT sent_at, ok, body FROM sales_alerts
+                        ORDER BY sent_at DESC LIMIT 3""")
+        recent = cur.fetchall()
+        if recent:
+            print("\nlast alerts:")
+        for sent_at, ok, body in recent:
+            print("  {}  {}  {}".format(sent_at.strftime("%m-%d %H:%M"),
+                                        "ok" if ok else "FAIL", body[:88]))
+    print("\nconnectivity:")
+    try:
+        Swoogo().token()
+        print("  swoogo    ok")
+    except Exception as exc:                                     # noqa: BLE001
+        print("  swoogo    FAIL  {}".format(str(exc)[:130]))
+    left = sms.quota()
+    print("  textbelt  {}".format("{} credits".format(left) if left is not None
+                                  else "no answer"))
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--dry-run", action="store_true", help="print texts, send none")
+    ap.add_argument("--seed", action="store_true",
+                    help="record every existing sale without texting")
+    ap.add_argument("--test", action="store_true",
+                    help="send one sample text to ALERT_TO and exit")
+    ap.add_argument("--doctor", action="store_true",
+                    help="run history, staleness and connectivity, then exit")
+    args = ap.parse_args()
+
+    if args.test:
+        for to, ok, detail in sms.send(
+                "RazMania test: this is where a sale alert lands.",
+                dry_run=args.dry_run):
+            print("  {:>18}  {}  {}".format(mask(to), "ok" if ok else "FAILED",
+                                            detail))
+        return 0
+
+    if not sms.recipients():
+        print("ALERT_TO is empty - nobody to text.", file=sys.stderr)
+        return 2
+
+    # Looked up here, not at import, so --test needs nothing but ALERT_TO.
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        cur.execute((Path(__file__).resolve().parent / "schema.sql").read_text())
+
+    if args.doctor:
+        return doctor(conn)
+
+    # ONE RUN AT A TIME. A sweep that overruns its five-minute slot would
+    # otherwise have the next tick read the same un-recorded sale and text it a
+    # second time. The lock belongs to this connection and is released when the
+    # process exits, however it exits - including a kill.
+    with conn.cursor() as cur:
+        cur.execute("SELECT pg_try_advisory_lock(%s)", (LOCK_KEY,))
+        if not cur.fetchone()[0]:
+            print("another run holds the lock - skipping this tick")
+            return 0
+
+    banner(conn)
+    run_id = start_run(conn)
+    code, note = 1, None
+    try:
+        code = poll(conn, args)
+    except Exception as exc:                                     # noqa: BLE001
+        traceback.print_exc()
+        code = 1
+        note = "{}: {}".format(type(exc).__name__, exc)[:400]
+    finally:
+        finish_run(conn, run_id, code, note=note)
+
+    # Never let a bookkeeping failure change the exit code of a run that did
+    # its actual job.
+    try:
+        check_credits(conn, args.dry_run)
+    except Exception as exc:                                     # noqa: BLE001
+        print("credit check failed: {}".format(exc), file=sys.stderr)
+    return code
 
 
 if __name__ == "__main__":
