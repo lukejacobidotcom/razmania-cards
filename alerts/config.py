@@ -33,6 +33,20 @@ EVENTS = [
         },
     },
     {
+        "id": 382098,
+        "kind": "sponsor",
+        "prefix": "RazMania sponsor",
+        # A separate event from the festival, created so a donation could be
+        # taken without the ticket store on the page. Both fields are Swoogo
+        # `Quantity` questions - the registrant carries a bare count ("2"),
+        # and Swoogo multiplies by the unit price itself, so the dollar figure
+        # still comes off individual_gross like everywhere else.
+        "items": {
+            "c_9170220": "kid weekend ($190)",
+            "c_9170222": "part share ($50)",
+        },
+    },
+    {
         "id": 372565,
         "kind": "exhibitor",
         "prefix": "RazMania booth",

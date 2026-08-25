@@ -40,7 +40,12 @@ from email.message import EmailMessage
 
 VIA = os.environ.get("SMS_VIA", "textbelt").strip().lower()
 TIMEOUT = int(os.environ.get("SMS_TIMEOUT", "20"))
-LOW_QUOTA = int(os.environ.get("TEXTBELT_LOW_QUOTA", "50"))
+# Measured burn on this event: ~27 paid sales/day across 3 recipients = ~81
+# credits/day, peaking at 43 sales the day before the show. A 50-credit warning
+# is therefore FOUR HOURS of notice - useless. 250 is about three days, enough
+# to notice, decide and top up. Raise it further if recipients are added: the
+# burn scales with the number of phones, the threshold does not do that for you.
+LOW_QUOTA = int(os.environ.get("TEXTBELT_LOW_QUOTA", "250"))
 TEXTBELT_URL = os.environ.get("TEXTBELT_URL", "https://textbelt.com")
 
 # Common US carrier gateways, for the `email` backend. Verizon and T-Mobile are

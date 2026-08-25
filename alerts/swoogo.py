@@ -130,3 +130,92 @@ class Swoogo:
             if len(items) < per_page:
                 return
             page += 1
+
+    # ---- writes -------------------------------------------------------
+    #
+    # Everything above this line is read-only and is what the five-minute sale
+    # alert cron uses. Nothing below is called by alerts/watch.py; it exists so
+    # autographs/catalog.py can build a session catalogue without a second
+    # Swoogo client. Additive on purpose - the poller is live and nine days out
+    # from the event is the wrong time to refactor it.
+
+    def paged(self, path, **params):
+        """Yield every item from a Yii-paginated list endpoint.
+
+        Same defensive loop as registrants(): stop on a short page and on a
+        repeated first id, so a schema change upstream degrades into "we read
+        one page" instead of hammering a rate-limited API forever.
+        """
+        page, seen_first, per_page = 1, None, int(params.pop("per_page", 200))
+        while True:
+            body = self.get(path, page=page, **{"per-page": per_page}, **params)
+            items = body.get("items", body) if isinstance(body, dict) else body
+            if not isinstance(items, list) or not items:
+                return
+            if seen_first is not None and items[0].get("id") == seen_first:
+                return
+            seen_first = items[0].get("id")
+            for it in items:
+                yield it
+            meta = body.get("_meta") if isinstance(body, dict) else None
+            if meta and meta.get("pageCount") and page >= int(meta["pageCount"]):
+                return
+            if len(items) < per_page:
+                return
+            page += 1
+
+    def _send(self, method, path, payload):
+        """POST/PUT a body, trying JSON first and form-encoding second.
+
+        Swoogo's v1 API is Yii-flavoured and its older write endpoints take
+        form-encoded bodies, while the newer per-object fee endpoints are
+        documented as application/json. Rather than keep a table of which
+        endpoint wants which - a table that would drift silently - try one and
+        fall back. A wrong first guess costs one extra HTTP call and says so in
+        the error if both fail.
+        """
+        url = f"{BASE}/{path}"
+        bodies = (
+            (json.dumps(payload).encode(), "application/json"),
+            (urllib.parse.urlencode(_form(payload)).encode(),
+             "application/x-www-form-urlencoded"),
+        )
+        last = (0, {})
+        for data, ctype in bodies:
+            for attempt in (1, 2):          # second pass only after a 401
+                status, body = _request(url, data=data, method=method, headers={
+                    "Authorization": f"Bearer {self.token()}",
+                    "Content-Type": ctype,
+                })
+                if status != 401 or attempt == 2:
+                    break
+                self._tok, self._exp = None, 0.0
+            if status < 400:
+                return body
+            last = (status, body)
+            # 401/403/404 will not be fixed by re-encoding the same body.
+            if status not in (400, 415, 422):
+                break
+        raise SwoogoError(f"{method} {path} failed ({last[0]}): {last[1]}")
+
+    def post(self, path, payload):
+        return self._send("POST", path, payload)
+
+    def put(self, path, payload):
+        return self._send("PUT", path, payload)
+
+
+def _form(payload):
+    """Flatten one level of nesting into Yii's bracket notation.
+
+    `{"conditional_prices": {"1254210": "45.00"}}` has to travel as
+    `conditional_prices[1254210]=45.00` when the body is form-encoded.
+    """
+    flat = {}
+    for k, v in payload.items():
+        if isinstance(v, dict):
+            for ik, iv in v.items():
+                flat[f"{k}[{ik}]"] = "" if iv is None else iv
+        else:
+            flat[k] = "" if v is None else v
+    return flat

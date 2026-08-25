@@ -545,6 +545,10 @@ def check_credits(conn, dry_run):
     if left is None:
         return
     print("textbelt credits: {}".format(left))
+    # NOTE the honest limit here: the "exhausted" warning is sent BY TEXT, so at
+    # zero credits it cannot be delivered. It is recorded and logged regardless,
+    # but the warning that actually reaches a human is the LOW_QUOTA one - which
+    # is why that threshold is set in days of runway, not in a round number.
     for threshold, key in ((0, "credits_empty"), (sms.LOW_QUOTA, "credits_low")):
         if left <= threshold and not warned_recently(conn, key, 24):
             sms.send("RazMania alerts: Textbelt credits {}. Sale texts stop at "
