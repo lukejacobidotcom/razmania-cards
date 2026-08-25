@@ -69,10 +69,14 @@ Measured off the live events on 20 Aug 2026:
 | Attendee tickets | ~20 in the previous 24 hours |
 | Combined | **~25–30 sales/day, and climbing toward the 29 Aug event** |
 
-At 3 recipients that is **~90 credits a day**. The balance was **697** at setup,
-so on current volume it runs dry in **about a week** — and the last week before
-an event is exactly when volume climbs. Check it any time with a plain GET that
-sends nothing:
+**What actually happened, 20-25 Aug 2026:** the balance went from 697 to **-1
+in five days** and alerts stopped dead for a day before anyone noticed. Real
+burn was **~139 credits/day**, not the ~90 modelled here - about 27 paid sales a
+day, but ~231 messages, because order *increases* alert too and a message over
+160 characters costs two credits. Budget from the measured number, not the
+sale count.
+
+Check the balance any time with a plain GET that sends nothing:
 
 ```bash
 curl https://textbelt.com/quota/$TEXTBELT_KEY
@@ -81,9 +85,17 @@ curl https://textbelt.com/quota/$TEXTBELT_KEY
 **Textbelt returns HTTP 200 with `success: false` when the balance hits zero.**
 It looks like a successful send to anything checking only the status code.
 `sms.py` checks `success`, logs remaining quota on every send, and warns below
-`TEXTBELT_LOW_QUOTA` (default 50). A run where nobody was reached deliberately
-does **not** record the sale, so topping up and waiting five minutes delivers
-the alerts that were missed rather than losing them.
+`TEXTBELT_LOW_QUOTA` (**default 250**, about two days of runway at the measured
+burn; it was 50, which is four hours, which is why nobody was warned in time).
+
+**The "exhausted" warning is sent by text, so at zero credits it cannot reach
+you.** The threshold warning is the only one that works. Raise the threshold if
+recipients are added - the burn scales with the number of phones and the
+threshold does not do that for you.
+
+A run where nobody was reached deliberately does **not** record the sale, so
+topping up and waiting five minutes delivers everything that was missed, as one
+batched catch-up summary, rather than losing it.
 
 Three knobs, in order of how much they save:
 
