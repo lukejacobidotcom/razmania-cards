@@ -98,6 +98,7 @@ sys.modules["psycopg2.extras"] = pg.extras
 
 # ------------------------------------------------------------------ fake Swoogo
 BY_EVENT = {370376: [], 372565: []}
+SESSIONS = {}
 sw = types.ModuleType("swoogo")
 
 
@@ -109,6 +110,8 @@ class Swoogo:
     def __init__(self, *a, **k): pass
     def registrants(self, event_id, fields=None, per_page=250):
         return list(BY_EVENT.get(event_id, []))
+    def paged(self, path, **params):
+        return list(SESSIONS.get(params.get("event_id"), []))
 
 
 sw.Swoogo, sw.SwoogoError = Swoogo, SwoogoError
@@ -277,6 +280,33 @@ rc = case("13. a concurrent run cannot double-send",
           TIX + [ticket(40, "Overlap", "Victim", "47.00", vip=1)], BOOTHS)
 assert rc == 0 and not SENT, SENT
 LOCK_FAIL = False
+
+# ------------------------------------------------ autographs (priced sessions)
+# Autographs are Swoogo SESSIONS with a fee, not quantity questions, so they are
+# invisible to the item table in config.py. Free agenda sessions must never be
+# named or every ticket buyer's text would list the schedule.
+SESS = {4400001: "Brock Wright 12:00 5-pack"}
+buyer = ticket(50, "Auto", "Buyer", "390.00")
+buyer["session_ids"] = [4400001]
+described = watch.describe(buyer, watch.config.EVENTS[0], SESS)
+print("\nautographs:")
+print("  paid session      ->", repr(described))
+assert "Brock Wright" in described, described
+
+free = watch.describe(dict(buyer, session_ids=[999999]), watch.config.EVENTS[0], SESS)
+print("  free agenda item  ->", repr(free))
+assert free == "", free
+
+mixed = ticket(51, "Both", "Buyer", "437.00", vip=1)
+mixed["session_ids"] = [4400001]
+print("  ticket + autograph->", repr(watch.describe(mixed, watch.config.EVENTS[0], SESS)))
+
+# Swoogo hands session_ids back as a list, a comma string, or null.
+assert watch.session_ids_of({"session_ids": [1, 2]}) == [1, 2]
+assert watch.session_ids_of({"session_ids": "3,4"}) == [3, 4]
+assert watch.session_ids_of({"session_ids": None}) == []
+assert watch.session_ids_of({}) == []
+print("  session_ids parsed in all three shapes")
 
 print("\nformatting:")
 for c in [2070, 51750, 165600, 19500, 2840000]:

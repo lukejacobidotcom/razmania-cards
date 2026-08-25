@@ -6,12 +6,19 @@ Text Luke, Jason and Patrick every time RazMania sells anything.
   python3 alerts/watch.py --seed     # record every existing sale, silently
   python3 alerts/watch.py --test     # send one sample text and stop
 
-Covers both Swoogo events, because RazMania sells through two of them:
+Covers every Swoogo event RazMania sells through - currently three, listed in
+config.py:
 
-  370376  attendee tickets - VIP, Adult, Child, Partners Circle - and the
-          Sponsor a Kid field the campaign page feeds
-  372565  exhibitor booths, a separate registration form with its own fields,
-          where the buyer is a vendor and the name that matters is the company
+  370376  attendee tickets - VIP, Adult, Child, Partners Circle - the original
+          Sponsor a Kid field, and the autograph sessions
+  382098  the dedicated Sponsor a Kid event, three donation fields
+  372565  exhibitor booths, its own registration form, where the buyer is a
+          vendor and the name that matters is the company
+
+Two different sale mechanisms are read. Quantity questions are listed per event
+in config.py. Autographs are Swoogo SESSIONS with a fee, which no item table can
+express, so events flagged `sessions` also have their priced sessions read and
+named. Either way the money comes off individual_gross.
 
 Run it from Render Cron every few minutes (see render.yaml). It is a poller, not
 a webhook, because Swoogo has no outbound webhook for a registration - the only
@@ -130,7 +137,53 @@ def count_of(raw):
         return 0
 
 
-def describe(reg, ev):
+def paid_sessions(sw, ev):
+    """{session_id: name} for the sessions on this event that COST MONEY.
+
+    Autographs are sold as Swoogo sessions with a fee, not as quantity
+    questions, so they are invisible to the item table in config.py - an
+    autograph buyer would alert with the right dollar figure and no description.
+
+    Only priced sessions are named. Free agenda items carry `price: null`, and
+    naming those would put the whole schedule into every ticket buyer's text.
+
+    One extra API call per event per run, and it fails soft: if the catalogue
+    cannot be read, sessions simply go unnamed rather than the run dying.
+    """
+    if not ev.get("sessions"):
+        return {}
+    out = {}
+    try:
+        for sess in sw.paged("sessions.json", event_id=ev["id"], expand="fees",
+                             fields="id,name,fees"):
+            fees = sess.get("fees") or {}
+            prices = [fees.get("price")]
+            prices += list((fees.get("conditional_prices") or {}).values())
+            if any(cents(p) > 0 for p in prices if p not in (None, "")):
+                out[int(sess["id"])] = (sess.get("name") or "session").strip()
+    except Exception as exc:                                     # noqa: BLE001
+        print("session catalogue unreadable ({}) - sessions will not be named"
+              .format(str(exc)[:90]), file=sys.stderr)
+    return out
+
+
+def session_ids_of(reg):
+    """Swoogo returns these as a list, a comma string, or null. Take all three."""
+    raw = reg.get("session_ids")
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    ids = []
+    for x in raw if isinstance(raw, (list, tuple)) else []:
+        try:
+            ids.append(int(str(x).strip()))
+        except (TypeError, ValueError):
+            pass
+    return ids
+
+
+def describe(reg, ev, sessions=None):
     """'2 Adult, 1 VIP', or '' when nothing configured matched.
 
     An empty string is the honest answer when the field ids in config.py have
@@ -142,6 +195,10 @@ def describe(reg, ev):
         n = count_of(reg.get(field))
         if n > 0:
             parts.append("{} {}".format(n, label))
+    for sid in session_ids_of(reg):
+        name = (sessions or {}).get(sid)
+        if name:
+            parts.append(name)
     return ", ".join(parts)
 
 
@@ -247,6 +304,9 @@ def compose_batch(rows, booked):
 def sweep(sw, ev):
     """Every confirmed, paid-for registrant on one event, as alert rows."""
     out = {}
+    sessions = paid_sessions(sw, ev)
+    if sessions:
+        print("  {} priced session(s) on this event".format(len(sessions)))
     for r in sw.registrants(ev["id"], fields=config.fields_for(ev)):
         if (r.get("registration_status") or "") != "confirmed":
             continue
@@ -258,7 +318,8 @@ def sweep(sw, ev):
             "name": "{} {}".format(r.get("first_name", ""),
                                    r.get("last_name", "")).strip(),
             "company": clean_company(r),
-            "email": r.get("email") or "", "items": describe(r, ev),
+            "email": r.get("email") or "",
+            "items": describe(r, ev, sessions),
             "cents": c, "reg": r, "created_at": r.get("created_at") or "",
         }
     return out

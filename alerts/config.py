@@ -21,6 +21,7 @@ EVENTS = [
         "id": 370376,
         "kind": "ticket",
         "prefix": "RazMania",
+        "sessions": True,
         # Quantity fields on the main registration form. The registrant record
         # carries the chosen quantity directly ("0".."10"), which is why these
         # do not need the line-item table to be described.
@@ -42,9 +43,17 @@ EVENTS = [
         # and Swoogo multiplies by the unit price itself, so the dollar figure
         # still comes off individual_gross like everywhere else.
         "items": {
-            "c_9170220": "kid weekend ($190)",
-            "c_9170222": "part share ($50)",
+            # THREE fields, not two. c_9166055 was missing from this table and a
+            # donation through it would have alerted with the right money and no
+            # description at all. Read off the live form, not guessed.
+            "c_9166055": "Sponsor a kid",
+            "c_9170220": "kid weekend",
+            "c_9170222": "part share",
         },
+        # Autographs are sold as SESSIONS with fees, not as quantity questions,
+        # so they cannot be listed above. Setting this makes the poller read the
+        # event's priced sessions and name them in the text.
+        "sessions": True,
     },
     {
         "id": 372565,
@@ -75,5 +84,6 @@ def event(event_id):
 def fields_for(e):
     """The registrant fields one sweep of this event has to ask for."""
     base = ("id,first_name,last_name,email,company,registration_status,"
-            "payment_status,individual_gross,group_gross,created_at,updated_at")
+            "payment_status,individual_gross,group_gross,created_at,updated_at"
+            ",session_ids")
     return ",".join([base] + sorted(e["items"]))
