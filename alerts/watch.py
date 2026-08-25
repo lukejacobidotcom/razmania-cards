@@ -386,6 +386,13 @@ def poll(conn, args):
 
     booked = sum(r["cents"] for r in live.values())
 
+    # Hourly digest. Never let a nice-to-have take down the alerting that
+    # actually matters.
+    try:
+        maybe_digest(conn, live, booked, args)
+    except Exception as exc:                                     # noqa: BLE001
+        print("digest failed: {}".format(exc), file=sys.stderr)
+
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SELECT registrant_id, name, company, email, cents FROM sales_seen")
         seen = {int(r["registrant_id"]): r for r in cur.fetchall()}
@@ -678,6 +685,8 @@ def main():
                     help="record every existing sale without texting")
     ap.add_argument("--test", action="store_true",
                     help="send one sample text to ALERT_TO and exit")
+    ap.add_argument("--digest", action="store_true",
+                    help="send the hourly summary now, ignoring the clock")
     ap.add_argument("--doctor", action="store_true",
                     help="run history, staleness and connectivity, then exit")
     args = ap.parse_args()
@@ -732,6 +741,102 @@ def main():
     except Exception as exc:                                     # noqa: BLE001
         print("credit check failed: {}".format(exc), file=sys.stderr)
     return code
+
+
+# ============================================================================
+# Hourly digest. "How are we doing" without having to ask.
+#
+# Deliberately NOT a second Render cron. The five-minute poller already wakes up
+# twelve times an hour with the live totals in hand, so the digest is a gate on
+# the clock rather than a new service, new env vars and another thing to notice
+# has broken.
+# ============================================================================
+
+DIGEST_TZ = os.environ.get("DIGEST_TZ", "America/Detroit")
+DIGEST_FROM = int(os.environ.get("DIGEST_FROM", "8"))    # 8am, inclusive
+DIGEST_TO = int(os.environ.get("DIGEST_TO", "23"))       # 11pm, inclusive
+
+
+def local_now():
+    """Now, in the event's own timezone.
+
+    Falls back to a fixed offset if the container has no tz database - a slim
+    image without tzdata would otherwise raise and take the whole run down for
+    the sake of a nice-to-have digest.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(DIGEST_TZ))
+    except Exception:                                            # noqa: BLE001
+        from datetime import timedelta
+        offset = int(os.environ.get("DIGEST_UTC_OFFSET", "-4"))  # EDT
+        return datetime.now(timezone.utc) + timedelta(hours=offset)
+
+
+def kv_get(conn, key):
+    with conn.cursor() as cur:
+        cur.execute("SELECT v FROM alert_state WHERE k = %s", (key,))
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def digest_body(now, live, booked, previous):
+    """One line: where the numbers stand, and how far they moved since the last one."""
+    by_kind = {}
+    for row in live.values():
+        by_kind[row["kind"]] = by_kind.get(row["kind"], 0) + 1
+    # config order, not alphabetical: tickets first because that is the number
+    # people actually watch, and "114 exhibitor, 201 ticket" reads backwards.
+    order = [e["kind"] for e in config.EVENTS]
+    parts = ", ".join("{} {}".format(by_kind[k], k)
+                      for k in sorted(by_kind, key=lambda k: order.index(k)
+                                      if k in order else 99))
+    orders = len(live)
+    # %-I is not portable to Windows; strip the pad zero by hand instead.
+    hour = now.strftime("%I%p").lstrip("0").lower()
+    body = "RazMania {}: {} paid orders ({}) | {} booked".format(
+        hour, orders, parts, usd(booked, short=True))
+    if previous:
+        try:
+            was_orders, was_cents = (int(x) for x in previous.split(",")[:2])
+            body += " | +{} orders, +{} since last".format(
+                orders - was_orders, usd(booked - was_cents))
+        except (ValueError, TypeError):
+            pass
+    return ascii_only(body)
+
+
+def maybe_digest(conn, live, booked, args):
+    """Send at most one digest per clock hour, inside the configured window.
+
+    Keyed on the local date+hour, so a five-minute poller firing twelve times an
+    hour sends exactly one, and a run that is skipped or fails simply means the
+    next run inside the same hour sends it instead.
+    """
+    forced = getattr(args, "digest", False)
+    if args.seed:
+        return
+    now = local_now()
+    if not forced and not (DIGEST_FROM <= now.hour <= DIGEST_TO):
+        return
+    stamp = now.strftime("%Y-%m-%d %H")
+    if not forced and kv_get(conn, "digest_hour") == stamp:
+        return
+    body = digest_body(now, live, booked, kv_get(conn, "digest_last"))
+    results = sms.send(body, dry_run=args.dry_run)
+    print("[digest] {}".format(body))
+    with conn.cursor() as cur:
+        delivered = record(cur, None, "digest", None, body, results,
+                           dry_run=args.dry_run)
+    if args.dry_run:
+        return
+    if not delivered:
+        # Do not burn the hour's slot on a digest nobody received; the next run
+        # inside this hour will try again.
+        print("  !! digest reached nobody - will retry this hour", file=sys.stderr)
+        return
+    kv_set(conn, "digest_hour", stamp)
+    kv_set(conn, "digest_last", "{},{}".format(len(live), booked))
 
 
 if __name__ == "__main__":

@@ -31,6 +31,9 @@ os.environ["SMS_VIA"] = "textbelt"
 # that happens to have sourced .env. The forward-only cases set them explicitly.
 os.environ.pop("ALERT_SINCE", None)
 os.environ.pop("MIN_ALERT_DOLLARS", None)
+# The hourly digest is a separate feature with its own case below; a window that
+# can never match keeps it out of every other assertion.
+os.environ["DIGEST_FROM"] = "99"
 
 # ---------------------------------------------------------------- fake Postgres
 STATE = {}
@@ -307,6 +310,26 @@ assert watch.session_ids_of({"session_ids": "3,4"}) == [3, 4]
 assert watch.session_ids_of({"session_ids": None}) == []
 assert watch.session_ids_of({}) == []
 print("  session_ids parsed in all three shapes")
+
+# ------------------------------------------------------------ hourly digest
+# Fires at most once per clock hour inside the window, reports the totals people
+# actually watch, and must fit one Textbelt credit.
+STATE.clear()
+watch.ALERT_SINCE = ""
+case("14a. seed", TIX, BOOTHS, ("--seed",))
+SENT.clear()
+rc = case("14b. forced digest reports the live totals", TIX, BOOTHS, ("--digest",))
+assert rc == 0, rc
+assert len(SENT) == 1, SENT
+assert "6 paid orders" in SENT[0], SENT
+assert "3 ticket" in SENT[0] and "3 exhibitor" in SENT[0], SENT
+assert len(SENT[0]) <= watch.SMS_LIMIT, "digest costs two credits: " + SENT[0]
+print("   {} chars: {}".format(len(SENT[0]), SENT[0]))
+
+# Outside the window it must stay silent even with sales on the books.
+SENT.clear()
+rc = case("14c. outside the window -> silent", TIX, BOOTHS)
+assert not SENT, SENT
 
 print("\nformatting:")
 for c in [2070, 51750, 165600, 19500, 2840000]:

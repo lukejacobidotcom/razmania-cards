@@ -118,6 +118,14 @@ services:
                                # sale would otherwise look brand new.
                                # IN UTC: Swoogo stamps created_at in UTC,
                                # not in the event timezone. Measured.
+      - key: DIGEST_FROM
+        value: "8"             # hourly "where are we" text, 8am..
+      - key: DIGEST_TO
+        value: "23"            # ..through 11pm, event-local time. 16 a day, so
+                               # 48 credits/day at three recipients. Set DIGEST_TO
+                               # below DIGEST_FROM to switch the digest off.
+      - key: DIGEST_TZ
+        value: "America/Detroit"
       - key: FIRST_RUN_GUARD
         value: "5"             # max sales an unseeded run may announce before it
                                # aborts and tells you to --seed instead

@@ -208,6 +208,33 @@ That second query is also the honest source for the **kids sponsored** counter
 on the Sponsor a Kid page, which is currently a hidden placeholder — filter
 `items LIKE '%Sponsor a Kid%'`.
 
+## The hourly digest
+
+```
+RazMania 5pm: 315 paid orders (201 ticket, 114 exhibitor) | $51k booked | +6 orders, +$1,242 since last
+```
+
+One text an hour, **8am to 11pm event-local time** — 16 a day, so 48 credits at
+three recipients, on top of the per-sale alerts.
+
+It is **not** a second Render service on purpose. The five-minute poller already
+wakes up twelve times an hour holding the live totals, so the digest is a gate
+on the clock rather than another job to configure and another thing to notice
+has broken. It is keyed on the local date and hour, so exactly one goes out per
+hour however many times the poller runs; if the send reaches nobody the slot is
+not consumed and the next run inside that hour tries again.
+
+| | |
+|---|---|
+| `DIGEST_FROM` / `DIGEST_TO` | `8` and `23`, inclusive. Set `DIGEST_TO` below `DIGEST_FROM` to switch it off. |
+| `DIGEST_TZ` | `America/Detroit`. Falls back to a fixed `DIGEST_UTC_OFFSET` if the container has no tz database, rather than taking the run down for a nice-to-have. |
+| `--digest` | send one right now, ignoring the clock |
+
+**"Paid orders" counts orders, not people.** 315 orders is 810 ticket
+holders — one registration can carry several passes. If the number you want on
+your phone is headcount rather than orders, that is a different query and worth
+saying so.
+
 ## Operations and hardening
 
 Everything here exists because of a failure this service actually had, or one it
