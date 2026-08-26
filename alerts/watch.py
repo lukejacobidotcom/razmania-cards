@@ -465,6 +465,20 @@ def poll(conn, args):
         return 0
 
     if not seen and len(changes) > FIRST_RUN_GUARD:
+        # It used to refuse SILENTLY as far as anyone's phone was concerned:
+        # log-only, exit 3, every five minutes, while the hourly digest carried
+        # on arriving. That is the worst possible shape - it looks alive and
+        # announces nothing. Say so, once a day, on the same channel.
+        try:
+            if not warned_recently(conn, "blocked_unseeded", 24):
+                sms.send("RazMania alerts are BLOCKED: {} sales are waiting and "
+                         "the state table is empty. Nothing will be announced "
+                         "until someone runs watch.py --seed."
+                         .format(len(changes)), dry_run=args.dry_run)
+                if not args.dry_run:
+                    kv_set(conn, "blocked_unseeded", len(changes))
+        except Exception as exc:                                 # noqa: BLE001
+            print("could not announce the block: {}".format(exc), file=sys.stderr)
         print("REFUSING TO SEND: the state table is empty and there are already "
               "{} sales. That would be {} texts across {} phone(s) and empty the "
               "Textbelt balance.\nRun this once first:\n"
