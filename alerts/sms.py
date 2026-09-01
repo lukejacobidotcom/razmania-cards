@@ -39,6 +39,14 @@ import urllib.request
 from email.message import EmailMessage
 
 VIA = os.environ.get("SMS_VIA", "textbelt").strip().lower()
+# KILL SWITCH. ALERTS_OFF=1 mutes every outbound message - sale alerts, the
+# hourly digest, credit warnings, the lot - at the one choke point they all pass
+# through, so nothing can route around it.
+#
+# It MUTES rather than pauses: the poller still sweeps and still records what it
+# saw, so turning it back on resumes from now instead of dumping days of backlog
+# at three phones. Flip ALERTS_OFF back to 0 to resume.
+MUTED = os.environ.get("ALERTS_OFF", "0").strip() == "1"
 TIMEOUT = int(os.environ.get("SMS_TIMEOUT", "20"))
 # Measured burn on this event: ~27 paid sales/day across 3 recipients = ~81
 # credits/day, peaking at 43 sales the day before the show. A 50-credit warning
@@ -142,6 +150,11 @@ def send(body, to=None, dry_run=False):
     the other two people's alert. Every failure is caught per recipient and
     handed back for the audit table.
     """
+    if MUTED:
+        print("  ALERTS_OFF=1 - muted, not sent: {}".format(body[:110]))
+        # ok=True on purpose: state still advances, so re-enabling does not
+        # unleash every sale that happened while muted.
+        return [(r, True, "muted") for r in (to or recipients())]
     out = []
     for r in (to or recipients()):
         if dry_run:

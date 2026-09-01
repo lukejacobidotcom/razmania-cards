@@ -118,6 +118,11 @@ services:
                                # sale would otherwise look brand new.
                                # IN UTC: Swoogo stamps created_at in UTC,
                                # not in the event timezone. Measured.
+      - key: ALERTS_OFF
+        value: "1"             # KILL SWITCH. 1 = send nothing at all. The poller
+                               # still sweeps and records, so flipping this back
+                               # to "0" resumes from now rather than dumping the
+                               # whole muted period at three phones.
       - key: DIGEST_FROM
         value: "8"             # hourly "where are we" text, 8am..
       - key: DIGEST_TO

@@ -357,7 +357,7 @@ def record(cur, rid, kind, row, body, results, dry_run=False):
                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
             (rid, kind, row.get("was") if row else None,
              row.get("cents") if row else None, body, to, ok,
-             None if ok else detail))
+             detail if (not ok or detail == "muted") else None))
     if not dry_run:
         SENT_THIS_RUN.extend(to for to, ok, _ in results if ok)
     return any(ok for _, ok, _ in results)
