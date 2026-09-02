@@ -172,6 +172,25 @@ elif tail_age > every + 7:
 elif tail_age > every + 1:
     print(f"WARN: tail {tail_age}d old on a {every}d cadence, run is due")
 
+# VOLUME GATE. Staleness alone is not enough: on 17 Aug 2026 the scraper kept
+# returning rows dated today while quietly delivering ~15% of the usual tail
+# and ~50% of the usual hot tier, and nothing here noticed for sixteen days.
+# Compare the last 7 days of publishable volume against the 28 days before.
+cur.execute("""SELECT
+      (SELECT count(*) FROM sales WHERE is_publishable
+         AND sold_date >  current_date - 7) / 7.0,
+      (SELECT count(*) FROM sales WHERE is_publishable
+         AND sold_date <= current_date - 7 AND sold_date > current_date - 35) / 28.0""")
+recent, prior = cur.fetchone()
+if prior and prior > 0:
+    ratio = float(recent) / float(prior)
+    print(f"volume: {float(recent):.0f}/day last 7d vs {float(prior):.0f}/day prior 28d ({ratio:.0%})")
+    if ratio < 0.4:
+        sys.exit(f"FAIL: publishable volume is {ratio:.0%} of the prior month - "
+                 "the scraper is under-collecting (check Apify actor pagination)")
+    if ratio < 0.7:
+        print(f"WARN: volume down to {ratio:.0%} of the prior month")
+
 cur.execute("SELECT count(*) FROM mv_leaderboard_7d")
 lb = cur.fetchone()[0]
 if lb == 0:

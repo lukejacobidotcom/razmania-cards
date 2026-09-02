@@ -197,11 +197,27 @@ function rzi_spark($pts, $w = 160, $h = 36) {
 }
 
 /* ----------------------------------------------------------------- blocks */
+/**
+ * A tier is SUSPENDED when its newest settled point sits more than a week past
+ * its own lag. That happens when the composition guard is withholding windows
+ * — i.e. the cheap tier is being under-collected — and the honest thing to
+ * show is that, not a two-week-old number dressed as today's.
+ */
+function rzi_suspended($d) {
+    if (empty($d['settled_through']) || empty($d['last_sale_date'])) return false;
+    $gap = (strtotime($d['last_sale_date']) - strtotime($d['settled_through'])) / 86400;
+    return $gap > (int)$d['settle_days'] + 7;
+}
+
 /** One tier's headline tile. */
 function rzi_tile($d, $name, $sub) {
     $h = rzi_head($d);
     if (!$h) return '<div class="rzi-tile rzi-tile--empty"><span class="rzi-eyebrow">' . esc_html($name)
                   . '</span><p class="rzi-muted">Building its base period — needs about two weeks of settled data.</p></div>';
+    if (rzi_suspended($d)) return '<div class="rzi-tile rzi-tile--empty"><span class="rzi-eyebrow">' . esc_html($name)
+                  . '</span><span class="rzi-tile-val rzi-tile-val--sus">Suspended</span>'
+                  . '<span class="rzi-tile-sub">Publication paused since ' . esc_html(rzi_date($d['settled_through']))
+                  . ': recent windows fail the composition check (see methodology §5). Resumes automatically when collection is complete.</span></div>';
     ob_start(); ?>
     <div class="rzi-tile">
       <span class="rzi-eyebrow"><?php echo esc_html($name); ?></span>
@@ -405,7 +421,13 @@ add_shortcode('razmania_index_methodology', function () {
           materially high — on data calibrated to this market's real price split, roughly nine percent high at the current
           cadence, and more than double under a weekly one. Publishing those days would show the hobby surging and
           collapsing on a cycle set entirely by the collection schedule. So they are not published. The lag is the
-          honest cost of the data, not a defect in it.</p></li>
+          honest cost of the data, not a defect in it.</p>
+          <p><strong>The composition check.</strong> The calendar is not trusted on its own. Every window is also
+          required to <em>look</em> like the base period: the share of its sales at $<?php echo $hot; ?> and above may be at
+          most two and a half times the share in the base window. Under-collection of the cheaper range — the way
+          this data actually fails in practice — pushes that share up immediately, and the window is withheld
+          regardless of what the schedule says. When that happens for long enough, the tier is marked <em>suspended</em>
+          on this page rather than left showing a stale number. The Blue Chip tier is immune by construction.</p></li>
 
         <li><h3>Minimum sample</h3>
           <p>A category publishes a point only when its seven-day window holds at least <strong>20 confirmed sales</strong>. Card
@@ -487,7 +509,17 @@ add_shortcode('razmania_index_page', function () {
       </section>
       <?php endif; ?>
 
-      <?php if (!is_wp_error($al) && !empty($al['series'])):
+      <?php if (!is_wp_error($al) && rzi_suspended($al)): ?>
+      <section class="rzi-index"><h2 class="rzi-h2">Broad market</h2>
+        <p class="rzi-sub">Confirmed sales over $<?php echo number_format($al['floor']); ?> · base 100 at <?php echo esc_html(rzi_date($al['base_date'])); ?></p>
+        <p class="rzi-asof"><strong>Publication suspended since <?php echo esc_html(rzi_date($al['settled_through'])); ?>.</strong>
+          Windows after that date fail the composition check in methodology §5 — the share of $10,000+ sales in
+          them is far above the base period's, which means the $<?php echo number_format($al['floor']); ?>–9,999 range is being
+          under-collected. Publishing them would print a rally that is an artefact of collection, so the index
+          withholds them. It resumes on its own once collection is complete again. The Blue Chip index above is
+          unaffected, because its windows are $10,000+ by construction.</p>
+      </section>
+      <?php elseif (!is_wp_error($al) && !empty($al['series'])):
         $by = rzi_by_vertical($al['series']); $h = rzi_head($al); ?>
       <section class="rzi-index">
         <div class="rzi-head"><div><h2 class="rzi-h2">Broad market</h2>
@@ -527,6 +559,7 @@ add_action('wp_enqueue_scripts', function () {
     .rzi-tile-val{font-size:clamp(42px,5vw,56px);font-weight:800;line-height:1;letter-spacing:-.02em}
     .rzi-tile-deltas{font-size:14px}.rzi-tile-deltas>span+span{margin-left:12px}
     .rzi-tile-sub{font-size:12px;color:var(--rzi-ink3)}
+    .rzi-tile-val--sus{font-size:26px;color:var(--rzi-ink3);font-weight:700}
     /* hero (homepage) */
     .rzi-hero{display:grid;grid-template-columns:1.1fr 1fr;gap:28px;align-items:center;padding:28px 0;border-top:1px solid var(--rzi-line2);border-bottom:1px solid var(--rzi-line2)}
     .rzi-hero-h{font-family:Georgia,serif;font-size:clamp(24px,3.2vw,34px);line-height:1.15;margin:8px 0 14px}

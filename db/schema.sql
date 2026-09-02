@@ -347,9 +347,13 @@ CREATE TABLE IF NOT EXISTS index_base (
     -- enter at 100 while the others sit at 130, and the renormalised mean would
     -- step down on a day when no price moved.
     weight      NUMERIC,
+    -- Share of the base window's sales at/above hot_floor. The composition
+    -- guard in mv_market_index compares every later window against this.
+    base_hot_share NUMERIC,
     pinned_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tier, vertical)
 );
+ALTER TABLE index_base ADD COLUMN IF NOT EXISTS base_hot_share NUMERIC;
 
 -- Migrate a pre-tier index_base in place. Dropping and rebuilding it would
 -- rebase published history, which is the one thing this table exists to stop.
@@ -404,6 +408,7 @@ SELECT t.tier,
        c.as_of,
        s.vertical,
        count(*)           AS sales,
+       count(*) FILTER (WHERE s.total_price >= (SELECT hot_floor FROM cfg)) AS hot_sales,
        sum(s.total_price) AS gmv,
        -- ::numeric is load-bearing, not decorative. percentile_cont returns
        -- DOUBLE PRECISION, and round(double precision, integer) does not exist
@@ -428,21 +433,29 @@ HAVING count(*) >= 20;      -- THE min-window rule. Defined here and nowhere els
 CREATE OR REPLACE FUNCTION pin_index_base() RETURNS void AS $$
 BEGIN
     WITH firsts AS (
-        SELECT DISTINCT ON (tier, vertical) tier, vertical, as_of, median_price, gmv
+        SELECT DISTINCT ON (tier, vertical) tier, vertical, as_of, median_price, gmv,
+               hot_sales::numeric / sales AS hot_share
           FROM v_index_windows ORDER BY tier, vertical, as_of
     ),
     -- Weights go only to verticals qualifying on the FIRST day any vertical in
     -- that tier does, so each composite starts at exactly 100.00.
     launch AS (SELECT tier, min(as_of) AS d FROM firsts GROUP BY tier),
     already AS (SELECT DISTINCT tier FROM index_base)
-    INSERT INTO index_base (tier, vertical, base_date, base_median, weight)
+    INSERT INTO index_base (tier, vertical, base_date, base_median, weight, base_hot_share)
     SELECT f.tier, f.vertical, f.as_of, f.median_price,
            CASE WHEN f.as_of = l.d AND f.tier NOT IN (SELECT tier FROM already)
                 THEN f.gmv / sum(f.gmv) FILTER (WHERE f.as_of = l.d)
                                         OVER (PARTITION BY f.tier)
-           END
+           END,
+           f.hot_share
       FROM firsts f JOIN launch l USING (tier)
     ON CONFLICT (tier, vertical) DO NOTHING;
+    -- Rows pinned before this column existed: fill from the base window itself.
+    UPDATE index_base b
+       SET base_hot_share = w.hot_sales::numeric / w.sales
+      FROM v_index_windows w
+     WHERE b.base_hot_share IS NULL
+       AND w.tier = b.tier AND w.vertical = b.vertical AND w.as_of = b.base_date;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -458,10 +471,23 @@ settle AS (
     SELECT 'bluechip',
            (SELECT v::int FROM schema_meta WHERE k = 'index_settle_days_bluechip')
 ),
+-- THE COMPOSITION GUARD. The settle lag assumes the slower tier has landed by
+-- the time a day is published. That assumption held until 17 Aug 2026, when
+-- the scraper's tail collection silently dropped to ~15% of normal for two
+-- weeks and every broad window became ~30% hot-tier instead of ~9%. Those
+-- windows were "settled" by the calendar and wildly wrong in fact — the broad
+-- composite read 188 with a -45% week. So a window is also required to LOOK
+-- like the base period: its $hot_floor+ share may be at most 2.5x the base
+-- share. Under-collection of the cheap tier fails this directly, whatever the
+-- cadence config says. 'bluechip' windows are 100% hot by construction, so the
+-- guard is a no-op there — which is why it stayed correct through the outage.
 vert AS (
     SELECT w.tier, w.as_of, w.vertical, w.sales, w.gmv, w.median_price,
            b.base_date,
-           100 * w.median_price / b.base_median AS index_value
+           100 * w.median_price / b.base_median AS index_value,
+           (w.tier = 'bluechip'
+            OR b.base_hot_share IS NULL
+            OR w.hot_sales::numeric / w.sales <= 2.5 * b.base_hot_share) AS complete
       FROM v_index_windows w
       JOIN index_base b USING (tier, vertical)
      WHERE w.as_of >= b.base_date
@@ -477,7 +503,8 @@ composite AS (
            sum(v.gmv)    AS gmv,
            NULL::numeric AS median_price,
            min(v.base_date) AS base_date,
-           sum(v.index_value * b.weight) / sum(b.weight) AS index_value
+           sum(v.index_value * b.weight) / sum(b.weight) AS index_value,
+           bool_and(v.complete) AS complete
       FROM vert v
       JOIN index_base b
         ON b.tier = v.tier AND b.vertical = v.vertical AND b.weight IS NOT NULL
@@ -502,7 +529,8 @@ SELECT
     round(100 * (a.index_value / NULLIF(p7.index_value, 0)  - 1), 1) AS pct_change_7d,
     round(100 * (a.index_value / NULLIF(p30.index_value, 0) - 1), 1) AS pct_change_30d,
     s.days                       AS settle_days,
-    (a.as_of <= b.last_date - s.days) AS settled
+    a.complete,
+    (a.as_of <= b.last_date - s.days AND a.complete) AS settled
 FROM allrows a
 CROSS JOIN bounds b
 JOIN settle s ON s.tier = a.tier

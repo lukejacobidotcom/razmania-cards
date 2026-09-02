@@ -105,6 +105,22 @@ happened. `Unknown` (~17% of rows) is excluded outright: it tracks
 *mix* moves. Doubling one vertical's volume without touching a price shifts a
 pooled median by ~9% and the composite by **0.00**.
 
+**5. The calendar is not trusted on its own — every window must also *look like*
+the base period.** A window publishes only if its `$10,000+` share is at most
+2.5× the base window's. This exists because of what production data showed on
+launch day: on **17 Aug 2026 the scraper's tail collection silently fell to
+~15% of normal** (four price bands returning an identical ~36 rows — a
+pagination failure in the Apify actor), the hot tier to ~50%, and nothing
+noticed for sixteen days because the freshness gate only checks staleness.
+Every broad window since was "settled" by the calendar and ~30% hot-tier in
+fact; the composite read **188 with a −45% week**. The composition guard
+withholds exactly those windows (`complete = false`), and the plugin shows the
+tier as *suspended* rather than as a stale number. Reproduced in the test suite:
+starving the tail to 15% for 14 days pulls the broad frontier back 9 days and
+flags 62 windows that would have read ~214, while Blue Chip — 100% hot by
+construction — is untouched. `refresh_daily.sh` now also fails the run when
+7-day volume drops below 40% of the prior month, so a collapse is loud.
+
 ### Two ways to break it
 
 **Moving a price floor invalidates that tier's base.** This matters, because this
@@ -375,6 +391,12 @@ so deleted history cannot be re-scraped.
 - `mv_card_comps` is thin at this floor (17 cards clear n≥3). Player value pages
   need `MIN_PRICE=500`. Homepage modules do not.
 - Week-over-week columns stay `NULL` until two full weeks are loaded.
+- **The scraper is under-collecting since ~17 Aug 2026** (see index rule 5).
+  The broad index is self-suspended until it is fixed; the leaderboard and
+  Blue Chip are running on roughly half their normal hot-tier volume. Likely an
+  Apify actor pagination regression (the actor was modified ~23 Aug); eBay only
+  exposes ~90 days of sold data, so the Aug 17→fix gap can still be backfilled
+  with a wide window once the actor returns full pages again.
 - **The index needs ~2 weeks of `sold_date` coverage** before a settled point
   exists, and ~6 weeks before the chart reads as a trend. At the $2,000 floor the
   thin verticals (Motorsport, WWE, Hockey) will not clear n≥20 and are correctly

@@ -156,6 +156,13 @@ def market_index(
                       slowly (4 days at the shipped cadence of 3). The broad
                       market read.
 
+    `complete` is the composition guard: false when a window's $hot_floor+ share
+    is more than 2.5x the base period's, which is the signature of the cheap
+    tier being under-collected. A point is only `settled` if it is also
+    complete. This exists because on 17 Aug 2026 tail collection silently fell
+    to ~15% of normal and the calendar alone would have published a broad
+    composite of 188 with a -45% week.
+
     `settle_days` is returned per row and comes from schema_meta, which
     etl/refresh_daily.sh rewrites from the scraper config on every run. It is
     not a constant in this file and must not become one: if the cadence changed
@@ -172,7 +179,7 @@ def market_index(
              WHERE tier = %(tier)s AND (%(uns)s OR settled)
         )
         SELECT tier, vertical, as_of, base_date, sales, gmv, median_price,
-               index_value, pct_change_7d, pct_change_30d, settle_days, settled
+               index_value, pct_change_7d, pct_change_30d, settle_days, complete, settled
           FROM mv_market_index, anchor
          WHERE as_of > anchor.d - %(days)s::int AND {where}
          ORDER BY vertical, as_of""", p)
@@ -181,7 +188,7 @@ def market_index(
     latest = q(f"""
         SELECT DISTINCT ON (vertical)
                tier, vertical, as_of, sales, gmv, median_price,
-               index_value, pct_change_7d, pct_change_30d, settle_days, settled
+               index_value, pct_change_7d, pct_change_30d, settle_days, complete, settled
           FROM mv_market_index
          WHERE {where}
          ORDER BY vertical, as_of DESC""", p)
