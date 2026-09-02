@@ -125,6 +125,24 @@ empty full-width page at `/index/`. Set that URL in **Settings → RazMania
 Index** so the citation block prints it. `[razmania_index_hero]` and
 `[razmania_ticker]` go on the homepage.
 
+### Done on 2 Sep 2026
+
+`razmania-index` is installed and active on razmania.com. Pages: `/widgets/`
+(id 3155, `[razmania_widgets]`) and `/index/` (id 3156,
+`[razmania_index_page]`). Settings → RazMania Index has the API base URL set;
+**the API key is not set** — the live `razmania-cards` stores its settings
+under different option names than this repo's copy, so nothing was inherited.
+`/widgets/` needs no key (the store is public). `/index/` reads `/v1/index` and
+shows "temporarily unavailable" until the key from the Render API service's
+environment is pasted into Settings → RazMania Index.
+
+Two things that bit: WordPress upload zips must be built with forward-slash
+entry paths (PowerShell `Compress-Archive` writes backslashes and the plugin
+lands as one file literally named `razmania-indexazmania-index.php`; use
+Python's `zipfile`). And deleting a plugin whose file WordPress can't resolve
+leaves its folder behind, so the next upload fails with "destination folder
+already exists" — WP File Manager can rename or remove it.
+
 ## Step 5 — WordPress (10 min)
 
 1. Upload `wordpress/razmania-cards/` to `wp-content/plugins/` (or zip that
