@@ -72,7 +72,8 @@ function rzi_settings_page() { ?>
 [razmania_index vertical="Pokemon"]         one category
 [razmania_index_hero]                       just the two headline numbers — for the homepage
 [razmania_ticker]                           the live tape — for the homepage
-[razmania_index_methodology]                the academic section on its own</pre>
+[razmania_index_methodology]                the academic section on its own
+[razmania_widgets]                          the widget store, full width (put it on /widgets)</pre>
       <p class="description"><strong>Two tiers, two lags.</strong> Blue Chip is $10,000+ and settles in 2 days
       because that slice is scraped daily. The broad index is $2,000+ and settles in 4 days because the
       $2,000&ndash;9,999 tail is scraped every 3 days. Both lags come from the scraper config. Never "fix" a
@@ -535,6 +536,24 @@ add_shortcode('razmania_index_page', function () {
 
       <?php echo do_shortcode('[razmania_index_methodology]'); ?>
     </article>
+    <?php return ob_get_clean();
+});
+
+/**
+ * The widget store, hosted at razmania.com/widgets. The store itself runs on
+ * the API service (it needs the live previews and the data); this shortcode
+ * gives it a razmania.com address, full width, sized to its content by the
+ * height message the store posts. No JavaScript in the page beyond that
+ * listener.
+ */
+add_shortcode('razmania_widgets', function () {
+    $src = rzi_api_base() . '/widgets';
+    ob_start(); ?>
+    <div class="rzi rzi-store">
+      <iframe id="rzi-store" src="<?php echo esc_url($src); ?>" title="RazMania widget store"
+              style="display:block;width:100%;min-height:100vh;border:0" loading="eager"></iframe>
+      <script>addEventListener('message',function(e){if(e.data&&e.data.type==='rzm-store-resize'){document.getElementById('rzi-store').style.height=(e.data.height+8)+'px'}});</script>
+    </div>
     <?php return ob_get_clean();
 });
 

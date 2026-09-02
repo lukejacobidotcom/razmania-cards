@@ -1,11 +1,12 @@
 """
 The widget store: embeddable, server-rendered widgets other sites can paste in.
 
-  GET /widgets                 the store - pick a widget, customise, copy the code
-  GET /embed/index             the RazMania Index (tier, category, sparkline)
-  GET /embed/top-sales         biggest confirmed sales, today or last 7 days
+  GET /widgets                 the store - browse, customise, copy the code
+  GET /embed/index             the RazMania Index: chart + detail strip
+  GET /embed/top-sales         biggest confirmed sales, today or last N days
   GET /embed/movers            categories ranked by 7-day index change
-  GET /embed/comps             latest confirmed sales matching a search term
+  GET /embed/comps             latest confirmed sales for a search, with a search box
+  GET /embed/price-check       median, typical range and sample size for a search
   GET /badge/index.svg         the index as an image, for READMEs and signatures
 
 Design rules, all deliberate:
@@ -13,17 +14,21 @@ Design rules, all deliberate:
   - Everything renders server-side into a self-contained HTML document. No
     external CSS or JS, no fonts, nothing the host page can block. The only
     script is a 6-line postMessage that reports the widget's own height so a
-    host can size the iframe to fit.
+    host can size the iframe to fit. The search boxes are plain GET forms that
+    navigate the iframe itself - no JavaScript on either side.
   - These routes are OUTSIDE the /v1 API-key guard. They are the public
-    product. They read the same materialized views as /v1, so a page view
-    never triggers an aggregation, and they inherit the CDN cache headers.
+    product. They read the same materialized views as /v1 (or the trigram
+    index, for search), so a page view never triggers a table scan, and they
+    inherit the CDN cache headers.
   - Every widget carries an attribution link. That link is why the store
     exists - it is the backlink engine - so it is not an option.
   - Every user-supplied value is validated by pattern or escaped on output.
-    The search term in /embed/comps is the only free text, and it goes through
-    html.escape before it touches the page.
+    The search term is the only free text, and it goes through html.escape
+    before it touches the page.
   - The floor is printed on every widget. The database cannot publish a number
     below it, but a widget on someone else's site can very easily mislabel one.
+  - A suspended tier (composition guard withholding windows) says so. A stale
+    number dressed as today's is the one thing these must never show.
 """
 
 import html
@@ -70,21 +75,6 @@ def nice_date(iso) -> str:
     return d.strftime("%d %b %Y").lstrip("0")
 
 
-def spark(points, w=160, h=36, stroke="var(--up)"):
-    vals = [float(p["index_value"]) for p in points]
-    n = len(vals)
-    if n < 2:
-        return ""
-    lo, hi = min(vals), max(vals)
-    if hi - lo < 0.01:
-        lo, hi = lo - 1, hi + 1
-    d = "".join(
-        f"{'M' if i == 0 else ' L'}{w * i / (n - 1):.1f} {h - 3 - (h - 6) * (v - lo) / (hi - lo):.1f}"
-        for i, v in enumerate(vals))
-    return (f'<svg class="spark" viewBox="0 0 {w} {h}" preserveAspectRatio="none" aria-hidden="true">'
-            f'<path d="{d}" fill="none" stroke="{stroke}" stroke-width="1.8" stroke-linejoin="round"/></svg>')
-
-
 def attribution(campaign: str) -> str:
     qs = urlencode({"utm_source": "widget", "utm_medium": "embed", "utm_campaign": campaign})
     return (f'<a class="attr" href="{SITE}/?{qs}" target="_blank" rel="noopener">'
@@ -95,12 +85,16 @@ def floor() -> float:
     return float(q(f"SELECT {FLOOR_SQL} AS v")[0]["v"])
 
 
+def tier_floor(tier: str) -> str:
+    return money(q("SELECT (SELECT v::numeric FROM schema_meta WHERE k=%s) AS v",
+                   ("hot_floor" if tier == "bluechip" else "publish_floor",))[0]["v"])
+
+
 def suspended(tier: str):
     """A tier is SUSPENDED when its newest settled point sits more than a week
     past its own lag - the composition guard is withholding windows because the
-    cheap tier is being under-collected. An embed on someone else's site must
-    say so rather than show a two-week-old number as today's. Returns the
-    settled-through date when suspended, else None."""
+    cheap tier is being under-collected. Returns the settled-through date when
+    suspended, else None."""
     r = q("""SELECT max(as_of) FILTER (WHERE settled) AS s, max(as_of) AS c, max(settle_days) AS d
                FROM mv_market_index WHERE tier = %s""", (tier,))[0]
     if r["s"] and r["c"] and (r["c"] - r["s"]).days > int(r["d"] or 0) + 7:
@@ -110,14 +104,28 @@ def suspended(tier: str):
 
 def suspended_note(since) -> str:
     return (f'<p class="empty"><b>Publication suspended</b> since {esc(nice_date(since))}: recent days fail '
-            f'the composition check (the $2,000-9,999 range is being under-collected), so the index '
+            f'the composition check (the $2,000–9,999 range is being under-collected), so the index '
             f'withholds them rather than print an artefact. It resumes on its own when collection is complete.</p>')
+
+
+def hidden_fields(**kw) -> str:
+    return "".join(f'<input type="hidden" name="{esc(k)}" value="{esc(v)}">' for k, v in kw.items() if v not in (None, ""))
+
+
+def sale_row(i, r, images) -> str:
+    return (f'<li class="item"><span class="rk">{i + 1}</span>'
+            + (f'<img src="{esc(r["image_url"])}" alt="" loading="lazy" referrerpolicy="no-referrer">'
+               if images and r["image_url"] else '<span></span>')
+            + f'<span><span class="t"><a href="{esc(r["url"])}" target="_blank" rel="nofollow noopener">{esc(r["title"])}</a></span>'
+              f'<span class="m">{esc(r["vertical"])}{(" · " + esc(r["grade_label"])) if r.get("grade_label") else ""}'
+              f' · {esc(nice_date(r["sold_date"]))}</span></span>'
+              f'<span class="p">{money(r["total_price"])}</span></li>')
 
 
 # ------------------------------------------------------------------ shell
 
 CSS = """
-*{box-sizing:border-box}html,body{margin:0;padding:0}
+*{box-sizing:border-box}html,body{margin:0;padding:0;height:100%}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
  background:var(--bg);color:var(--ink);font-size:var(--fs);line-height:1.4;font-variant-numeric:tabular-nums;
  -webkit-font-smoothing:antialiased}
@@ -128,29 +136,42 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 @media (prefers-color-scheme:dark){[data-theme=auto]{--bg:#14110D;--s1:#1E1A15;--s2:#2A251F;--ink:#F3EFE8;
  --ink2:#CFC8BE;--ink3:#9A928A;--line:rgba(255,255,255,.12);--line2:rgba(255,255,255,.24);--up:#5BD97E;--down:#FF7B6B}}
 [data-size=s]{--fs:12px}[data-size=l]{--fs:16px}
-.w{padding:calc(var(--fs)*1.1) calc(var(--fs)*1.2);display:flex;flex-direction:column;gap:calc(var(--fs)*.6);min-height:100%}
+.w{padding:calc(var(--fs)*1) calc(var(--fs)*1.1);display:flex;flex-direction:column;gap:calc(var(--fs)*.55);min-height:100%}
+.w.fill{height:100%}
 .eyebrow{font-size:.72em;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
 .title{font-size:1.15em;font-weight:700;line-height:1.2;margin:0}
-.big{font-size:2.6em;font-weight:800;line-height:1;letter-spacing:-.02em}
-.deltas{font-size:.9em}.deltas>span+span{margin-left:.8em}
+.big{font-size:2.5em;font-weight:800;line-height:1;letter-spacing:-.02em}
+.deltas{font-size:.9em;margin-top:.15em}.deltas>span+span{margin-left:.8em}
 .up{color:var(--up)}.down{color:var(--down)}.flat,.muted{color:var(--ink3)}
 .muted{font-size:.8em;line-height:1.35}
-.spark{display:block;width:100%;height:calc(var(--fs)*2.6)}
-.row{display:flex;align-items:baseline;justify-content:space-between;gap:.6em}
-.list{display:flex;flex-direction:column;gap:.35em;margin:0;padding:0;list-style:none}
+.row{display:flex;align-items:flex-start;justify-content:space-between;gap:.6em}
+.chart{position:relative;flex:1 1 auto;min-height:calc(var(--fs)*5.5);margin-bottom:1.2em}
+.chart svg{position:absolute;inset:0;width:100%;height:100%}
+.chart .lbl{position:absolute;font-size:.68em;color:var(--ink3);line-height:1;pointer-events:none}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.45em}
+.stat{background:var(--s2);border-radius:.5em;padding:.4em .55em;min-width:0}
+.stat b{display:block;font-size:1em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat span{display:block;font-size:.66em;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-top:.1em}
+.list{display:flex;flex-direction:column;gap:.3em;margin:0;padding:0;list-style:none}
 .item{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:.6em;align-items:center;padding:.4em 0;border-top:1px solid var(--line)}
-.item>span:nth-child(3){min-width:0}.item .t{display:block}
-.item:first-child{border-top:0}
+.item:first-child{border-top:0}.item>span:nth-child(3){min-width:0}
 .item img{width:2.9em;height:2.9em;object-fit:cover;border-radius:.35em;background:var(--s2)}
 .item .rk{width:1.4em;text-align:right;color:var(--ink3);font-size:.85em}
-.item .t{font-size:.9em;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.item .t{display:block;font-size:.9em;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .item .t a{color:inherit;text-decoration:none}.item .t a:hover{text-decoration:underline}
 .item .m{font-size:.75em;color:var(--ink3)}
 .item .p{font-weight:800;white-space:nowrap}
 .bar{height:.5em;background:var(--s2);border-radius:.25em;overflow:hidden}.bar i{display:block;height:100%}
+.srch{display:flex;gap:.4em}
+.srch input{flex:1;min-width:0;padding:.5em .65em;border:1px solid var(--line2);border-radius:.5em;background:var(--s1);color:var(--ink);font:inherit}
+.srch select{padding:.5em .4em;border:1px solid var(--line2);border-radius:.5em;background:var(--s1);color:var(--ink);font:inherit;font-size:.9em}
+.srch button{padding:.5em .85em;border:0;border-radius:.5em;background:var(--accent);color:#fff;font:inherit;font-weight:700;cursor:pointer}
 .foot{margin-top:auto;padding-top:.5em;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline;gap:.6em;font-size:.72em;color:var(--ink3)}
 .attr{color:var(--ink2);text-decoration:none;white-space:nowrap}.attr b{color:var(--accent)}
-.empty{color:var(--ink3);font-size:.9em}
+.empty{color:var(--ink3);font-size:.9em;margin:0}
+/* Narrow frames (the 300px store cards, sidebars): stack the header and use a
+   2x2 stat grid instead of squeezing four tiles into one row. */
+@media (max-width:360px){.row{flex-direction:column;gap:.2em}.row .muted{text-align:left!important}.stats{grid-template-columns:1fr 1fr}.big{font-size:2.2em}}
 """
 
 RESIZE_JS = """
@@ -159,36 +180,66 @@ window.addEventListener('load',s);window.addEventListener('resize',s);setTimeout
 """
 
 
-def shell(title: str, body: str, theme: str, size: str, accent: str) -> HTMLResponse:
+def shell(title: str, body: str, theme: str, size: str, accent: str, fill: bool = False) -> HTMLResponse:
     doc = (f'<!doctype html><html lang="en" data-theme="{esc(theme)}" data-size="{esc(size)}">'
            f'<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
            f'<meta name="robots" content="noindex"><title>{esc(title)}</title>'
            f'<style>{CSS}:root{{--accent:#{esc(accent)}}}</style></head>'
-           f'<body><div class="w">{body}</div>{RESIZE_JS}</body></html>')
+           f'<body><div class="w{" fill" if fill else ""}">{body}</div>{RESIZE_JS}</body></html>')
     return HTMLResponse(doc)
 
 
 # Shared parameter validators. Regex-bounded so nothing free-form reaches SQL
-# or the page except the comps search term, which is escaped on output.
+# or the page except the search term, which is escaped on output.
 THEME = Query("light", pattern="^(light|dark|auto)$")
 SIZE = Query("m", pattern="^(s|m|l)$")
 ACCENT = Query("9A6B00", pattern="^[0-9a-fA-F]{6}$")
 TIER = Query("bluechip", pattern="^(all|bluechip)$")
 CATEGORY = Query("", pattern="^[A-Za-z0-9 .'&-]{0,40}$")
+GRADE = Query("", pattern="^[A-Za-z0-9 .+-]{0,20}$")
+TERM = Query(None, alias="q", min_length=2, max_length=80)
 
 
-# ---------------------------------------------------------------- widgets
+# ------------------------------------------------------------- the index
 
 def _index_rows(tier: str, category: str, days: int):
-    vertical = category or "All"
-    rows = q("""SELECT as_of, index_value, pct_change_7d, pct_change_30d, sales, median_price,
+    return q("""SELECT as_of, index_value, pct_change_7d, pct_change_30d, sales, median_price,
                        settle_days, base_date
                   FROM mv_market_index
                  WHERE tier = %s AND vertical = %s AND settled
                    AND as_of > (SELECT max(as_of) FROM mv_market_index
                                  WHERE tier = %s AND settled) - %s::int
-                 ORDER BY as_of""", (tier, vertical, tier, days))
-    return rows
+                 ORDER BY as_of""", (tier, category or "All", tier, days))
+
+
+def big_chart(rows, up: bool) -> str:
+    """A chart that fills whatever space it is given. The path is drawn in a
+    0-100 x 0-100 box with preserveAspectRatio=none so it stretches to the
+    container; the labels are HTML positioned over it so they never distort."""
+    vals = [float(r["index_value"]) for r in rows]
+    n = len(vals)
+    lo, hi = min(min(vals), 100.0), max(max(vals), 100.0)
+    if hi - lo < 1.0:
+        lo, hi = lo - 1.0, hi + 1.0
+    pad = (hi - lo) * 0.10
+    lo, hi = lo - pad, hi + pad
+    span = hi - lo
+    px = lambda i: 100 * i / (n - 1)
+    py = lambda v: 100 * (1 - (v - lo) / span)
+    line = "".join(f"{'M' if i == 0 else ' L'}{px(i):.2f} {py(v):.2f}" for i, v in enumerate(vals))
+    area = line + " L100 100 L0 100 Z"
+    y100 = py(100.0)
+    col = "var(--up)" if up else "var(--down)"
+    return (f'<div class="chart"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">'
+            f'<line x1="0" x2="100" y1="{y100:.2f}" y2="{y100:.2f}" stroke="var(--line2)" stroke-width="1" vector-effect="non-scaling-stroke" stroke-dasharray="3 3"/>'
+            f'<path d="{area}" fill="{col}" opacity=".09"/>'
+            f'<path d="{line}" fill="none" stroke="{col}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>'
+            f'<circle cx="{px(n - 1):.2f}" cy="{py(vals[-1]):.2f}" r="2.2" fill="{col}" vector-effect="non-scaling-stroke"/></svg>'
+            f'<span class="lbl" style="left:0;top:0">{hi - pad:.0f}</span>'
+            f'<span class="lbl" style="left:0;bottom:0">{lo + pad:.0f}</span>'
+            f'<span class="lbl" style="right:0;top:calc({y100:.1f}% - .5em)">100</span>'
+            f'<span class="lbl" style="left:0;bottom:-1.3em">{esc(nice_date(rows[0]["as_of"]))}</span>'
+            f'<span class="lbl" style="right:0;bottom:-1.3em">{esc(nice_date(rows[-1]["as_of"]))}</span></div>')
 
 
 @router.get("/embed/index", response_class=HTMLResponse)
@@ -196,33 +247,41 @@ def embed_index(tier: str = TIER, category: str = CATEGORY, days: int = Query(90
                 chart: int = Query(1, ge=0, le=1), theme: str = THEME, size: str = SIZE,
                 accent: str = ACCENT):
     rows = _index_rows(tier, category, days)
-    fl = money(q(f"SELECT {('(SELECT v::numeric FROM schema_meta WHERE k=%s)')} AS v",
-                 ("hot_floor" if tier == "bluechip" else "publish_floor",))[0]["v"])
+    fl = tier_floor(tier)
     name = "Blue Chip Index" if tier == "bluechip" else "Index"
     label = category or "All tracked cards"
+    foot = (f'<div class="foot"><span>Confirmed sales over {fl} · best-offer listings excluded</span>'
+            f'{attribution("index")}</div>')
     since = suspended(tier)
     if since:
-        body = (f'<span class="eyebrow">The RazMania {esc(name)}</span><span class="big" style="font-size:1.6em;color:var(--ink3)">Suspended</span>'
-                + suspended_note(since)
-                + f'<div class="foot"><span>Sales over {fl}</span>{attribution("index")}</div>')
-        return shell("RazMania Index", body, theme, size, accent)
+        body = (f'<span class="eyebrow">The RazMania {esc(name)}</span>'
+                f'<span class="big" style="font-size:1.6em;color:var(--ink3)">Suspended</span>' + suspended_note(since) + foot)
+        return shell("RazMania Index", body, theme, size, accent, fill=True)
     if not rows:
         body = (f'<span class="eyebrow">The RazMania {esc(name)}</span><p class="empty">No settled data for '
-                f'{esc(label)} yet.</p><div class="foot"><span>Sales over {fl}</span>{attribution("index")}</div>')
-        return shell("RazMania Index", body, theme, size, accent)
+                f'{esc(label)} yet.</p>' + foot)
+        return shell("RazMania Index", body, theme, size, accent, fill=True)
     last = rows[-1]
-    up = float(last["index_value"]) >= float(rows[0]["index_value"])
+    vals = [float(r["index_value"]) for r in rows]
+    up = vals[-1] >= vals[0]
+    stats = (f'<div class="stats">'
+             f'<div class="stat"><b>{int(last["sales"]):,}</b><span>sales · 7d</span></div>'
+             + (f'<div class="stat"><b>{money(last["median_price"])}</b><span>median</span></div>' if last["median_price"] is not None
+                else f'<div class="stat"><b>{esc(nice_date(last["base_date"]))}</b><span>base = 100</span></div>')
+             + f'<div class="stat"><b>{max(vals):.1f}</b><span>{days}d high</span></div>'
+             f'<div class="stat"><b>{min(vals):.1f}</b><span>{days}d low</span></div></div>')
     body = (
-        f'<span class="eyebrow">The RazMania {esc(name)}</span>'
-        f'<div class="row"><div><span class="big">{float(last["index_value"]):.2f}</span>'
+        f'<div class="row"><div><span class="eyebrow">The RazMania {esc(name)}</span>'
+        f'<span class="big">{vals[-1]:.2f}</span>'
         f'<div class="deltas">{pct(last["pct_change_7d"], " 7d")}{pct(last["pct_change_30d"], " 30d")}</div></div>'
         f'<div class="muted" style="text-align:right">{esc(label)}<br>settled {esc(nice_date(last["as_of"]))}</div></div>'
-        + (spark(rows, stroke="var(--up)" if up else "var(--down)") if chart else "")
-        + f'<div class="foot"><span>Confirmed sales over {fl} · base 100 at {esc(nice_date(last["base_date"]))}'
-          f' · best-offer listings excluded</span>{attribution("index")}</div>'
+        + (big_chart(rows, up) if chart and len(rows) > 1 else "")
+        + stats + foot
     )
-    return shell("RazMania Index", body, theme, size, accent)
+    return shell("RazMania Index", body, theme, size, accent, fill=True)
 
+
+# ---------------------------------------------------------------- lists
 
 @router.get("/embed/top-sales", response_class=HTMLResponse)
 def embed_top_sales(period: int = Query(1, ge=1, le=7), category: str = CATEGORY,
@@ -234,21 +293,13 @@ def embed_top_sales(period: int = Query(1, ge=1, le=7), category: str = CATEGORY
         where += " AND vertical = %s"
         params.append(category)
     params.append(count)
-    rows = q(f"""SELECT title, vertical, total_price, sold_date, url, image_url, grade_label, listing_format
+    rows = q(f"""SELECT title, vertical, total_price, sold_date, url, image_url, grade_label
                   FROM mv_leaderboard_7d WHERE {where}
                  ORDER BY total_price DESC LIMIT %s""", tuple(params))
     fl = money(floor())
     when = "today" if period == 1 else f"last {period} days"
-    items = "".join(
-        f'<li class="item"><span class="rk">{i + 1}</span>'
-        + (f'<img src="{esc(r["image_url"])}" alt="" loading="lazy" referrerpolicy="no-referrer">' if images and r["image_url"] else '<span></span>')
-        + f'<span><span class="t"><a href="{esc(r["url"])}" target="_blank" rel="nofollow noopener">{esc(r["title"])}</a></span>'
-          f'<span class="m">{esc(r["vertical"])}{(" · " + esc(r["grade_label"])) if r["grade_label"] else ""}'
-          f' · {esc(nice_date(r["sold_date"]))}</span></span>'
-          f'<span class="p">{money(r["total_price"])}</span></li>'
-        for i, r in enumerate(rows))
-    if not rows:
-        items = f'<li class="empty">No confirmed sales over {fl} {esc(when)}{(" in " + esc(category)) if category else ""}.</li>'
+    items = "".join(sale_row(i, r, images) for i, r in enumerate(rows)) or \
+        f'<li class="empty">No confirmed sales over {fl} {esc(when)}{(" in " + esc(category)) if category else ""}.</li>'
     body = (f'<span class="eyebrow">Biggest confirmed sales · {esc(when)}</span>'
             f'<p class="title">{esc(category) if category else "Trading cards"} over {fl}</p>'
             f'<ul class="list">{items}</ul>'
@@ -259,16 +310,14 @@ def embed_top_sales(period: int = Query(1, ge=1, le=7), category: str = CATEGORY
 @router.get("/embed/movers", response_class=HTMLResponse)
 def embed_movers(tier: str = Query("all", pattern="^(all|bluechip)$"), count: int = Query(6, ge=2, le=14),
                  theme: str = THEME, size: str = SIZE, accent: str = ACCENT):
-    rows = q("""SELECT DISTINCT ON (vertical) vertical, index_value, pct_change_7d, pct_change_30d, sales
+    since = suspended(tier)
+    rows = [] if since else q("""SELECT DISTINCT ON (vertical) vertical, index_value, pct_change_7d
                   FROM mv_market_index
                  WHERE tier = %s AND settled AND vertical <> 'All' AND pct_change_7d IS NOT NULL
                  ORDER BY vertical, as_of DESC""", (tier,))
-    since = suspended(tier)
-    rows = [] if since else rows
     rows = sorted(rows, key=lambda r: -abs(float(r["pct_change_7d"])))[:count]
     rows = sorted(rows, key=lambda r: -float(r["pct_change_7d"]))
-    fl = money(q("SELECT (SELECT v::numeric FROM schema_meta WHERE k=%s) AS v",
-                 ("hot_floor" if tier == "bluechip" else "publish_floor",))[0]["v"])
+    fl = tier_floor(tier)
     mx = max((abs(float(r["pct_change_7d"])) for r in rows), default=1) or 1
     items = "".join(
         f'<li class="item" style="grid-template-columns:minmax(0,1fr) auto"><span><span class="t">{esc(r["vertical"])}'
@@ -287,39 +336,108 @@ def embed_movers(tier: str = Query("all", pattern="^(all|bluechip)$"), count: in
     return shell("Card market movers", body, theme, size, accent)
 
 
+# ---------------------------------------------------------------- search
+
+def _matches(term: str, category: str, grade: str, limit: int):
+    params = [term, term]
+    where = "is_publishable AND (title ILIKE '%%' || %s || '%%' OR title %% %s)"
+    if category:
+        where += " AND vertical = %s"
+        params.append(category)
+    if grade:
+        where += " AND grade_label = %s"
+        params.append(grade)
+    params.append(limit)
+    return q(f"""SELECT title, vertical, total_price, sold_date, url, image_url, grade_label
+                   FROM sales WHERE {where}
+                  ORDER BY sold_date DESC, total_price DESC LIMIT %s""", tuple(params))
+
+
+GRADES = ["", "PSA 10", "PSA 9", "PSA 8", "BGS 10", "BGS 9.5", "BGS 9", "SGC 10", "CGC 10", "Raw"]
+
+
+def search_form(action: str, term, category, grade, theme, size, accent, count, images, show_grade=False) -> str:
+    sel = ("".join(f'<option value="{esc(g)}"{" selected" if g == grade else ""}>{esc(g) or "Any grade"}</option>' for g in GRADES)
+           if show_grade else "")
+    return (f'<form class="srch" method="get" action="{esc(action)}">'
+            f'<input type="search" name="q" value="{esc(term or "")}" placeholder="Card, player or set…" '
+            f'minlength="2" maxlength="80" required aria-label="Search">'
+            + (f'<select name="grade" aria-label="Grade">{sel}</select>' if show_grade else "")
+            + hidden_fields(category=category, theme=theme, size=size, accent=accent, count=count, images=images)
+            + '<button type="submit">Go</button></form>')
+
+
 @router.get("/embed/comps", response_class=HTMLResponse)
-def embed_comps(request: Request, category: str = CATEGORY, count: int = Query(6, ge=1, le=25),
+def embed_comps(category: str = CATEGORY, grade: str = GRADE, count: int = Query(6, ge=1, le=25),
                 images: int = Query(1, ge=0, le=1), theme: str = THEME, size: str = SIZE,
-                accent: str = ACCENT, qs: Optional[str] = Query(None, alias="q", min_length=3, max_length=80)):
+                accent: str = ACCENT, term: Optional[str] = TERM, search: int = Query(1, ge=0, le=1)):
     fl = money(floor())
-    rows = []
-    if qs:
-        params = [qs, qs]
+    rows = _matches(term, category, grade, count) if term else []
+    items = "".join(sale_row(i, r, images) for i, r in enumerate(rows))
+    if not term:
+        items = '<li class="empty">Search for a card, player or set to see its latest confirmed sales.</li>'
+    elif not rows:
+        items = f'<li class="empty">No confirmed sales over {fl} match “{esc(term)}”{(" at " + esc(grade)) if grade else ""}.</li>'
+    body = (f'<span class="eyebrow">Live comps · latest confirmed sales</span>'
+            + (search_form("/embed/comps", term, category, grade, theme, size, accent, count, images) if search
+               else f'<p class="title">{esc(term or "")}{(" · " + esc(category)) if category else ""}</p>')
+            + f'<ul class="list">{items}</ul>'
+            f'<div class="foot"><span>eBay sales over {fl} · best-offer listings excluded</span>{attribution("comps")}</div>')
+    return shell(f"Live comps: {term or ''}", body, theme, size, accent)
+
+
+@router.get("/embed/price-check", response_class=HTMLResponse)
+def embed_price_check(category: str = CATEGORY, grade: str = GRADE, days: int = Query(90, ge=7, le=365),
+                      theme: str = THEME, size: str = SIZE, accent: str = ACCENT,
+                      term: Optional[str] = TERM, search: int = Query(1, ge=0, le=1)):
+    """What is it worth? Median, typical range and sample size over the most
+    recent matching sales. n>=3 or it says so - a price from two sales is not a
+    price, and this widget will live on other people's pages."""
+    fl = money(floor())
+    st, recent = None, []
+    if term:
+        params = [term, term]
         where = "is_publishable AND (title ILIKE '%%' || %s || '%%' OR title %% %s)"
         if category:
             where += " AND vertical = %s"
             params.append(category)
-        params.append(count)
-        rows = q(f"""SELECT title, vertical, total_price, sold_date, url, image_url, grade_label
-                       FROM sales WHERE {where}
-                      ORDER BY sold_date DESC, total_price DESC LIMIT %s""", tuple(params))
-    items = "".join(
-        f'<li class="item"><span class="rk">{i + 1}</span>'
-        + (f'<img src="{esc(r["image_url"])}" alt="" loading="lazy" referrerpolicy="no-referrer">' if images and r["image_url"] else '<span></span>')
-        + f'<span><span class="t"><a href="{esc(r["url"])}" target="_blank" rel="nofollow noopener">{esc(r["title"])}</a></span>'
-          f'<span class="m">{esc(r["vertical"])}{(" · " + esc(r["grade_label"])) if r["grade_label"] else ""}'
-          f' · {esc(nice_date(r["sold_date"]))}</span></span>'
-          f'<span class="p">{money(r["total_price"])}</span></li>'
-        for i, r in enumerate(rows))
-    if not qs:
-        items = '<li class="empty">Add <code>?q=</code> with a card, player or set name.</li>'
-    elif not rows:
-        items = f'<li class="empty">No confirmed sales over {fl} match “{esc(qs)}”.</li>'
-    body = (f'<span class="eyebrow">Live comps · latest confirmed sales</span>'
-            f'<p class="title">{esc(qs) if qs else "Live comps"}{(" · " + esc(category)) if category else ""}</p>'
-            f'<ul class="list">{items}</ul>'
-            f'<div class="foot"><span>eBay sales over {fl} · best-offer listings excluded</span>{attribution("comps")}</div>')
-    return shell(f"Live comps: {qs or ''}", body, theme, size, accent)
+        if grade:
+            where += " AND grade_label = %s"
+            params.append(grade)
+        where += " AND sold_date > current_date - %s::int"
+        params.append(days)
+        st = q(f"""WITH m AS (SELECT total_price, sold_date FROM sales WHERE {where}
+                              ORDER BY sold_date DESC LIMIT 300)
+                   SELECT count(*) AS n,
+                          percentile_cont(0.5)  WITHIN GROUP (ORDER BY total_price) AS med,
+                          percentile_cont(0.25) WITHIN GROUP (ORDER BY total_price) AS p25,
+                          percentile_cont(0.75) WITHIN GROUP (ORDER BY total_price) AS p75,
+                          max(total_price) AS top, min(sold_date) AS first, max(sold_date) AS last
+                     FROM m""", tuple(params))[0]
+        recent = _matches(term, category, grade, 3)
+    if term and st and int(st["n"]) >= 3:
+        head = (f'<div class="row"><div><span class="big">{money(st["med"])}</span>'
+                f'<div class="deltas"><span class="muted">median of {int(st["n"])} confirmed sales'
+                f'{(" · " + esc(grade)) if grade else ""}</span></div></div>'
+                f'<div class="muted" style="text-align:right">{esc(term)}<br>{esc(nice_date(st["first"]))} – {esc(nice_date(st["last"]))}</div></div>'
+                f'<div class="stats" style="grid-template-columns:repeat(3,1fr)">'
+                f'<div class="stat"><b>{money(st["p25"])}–{money(st["p75"])}</b><span>typical range</span></div>'
+                f'<div class="stat"><b>{money(st["top"])}</b><span>highest</span></div>'
+                f'<div class="stat"><b>{int(st["n"])}</b><span>sales · {days}d</span></div></div>'
+                f'<ul class="list">{"".join(sale_row(i, r, 1) for i, r in enumerate(recent))}</ul>')
+    elif term:
+        n = int(st["n"]) if st else 0
+        head = (f'<p class="empty">Only {n} confirmed sale{"s" if n != 1 else ""} over {fl} match “{esc(term)}”'
+                f'{(" at " + esc(grade)) if grade else ""} in the last {days} days — fewer than the three needed to '
+                f'quote a price. Try a broader term or a longer period.</p>')
+    else:
+        head = '<p class="empty">Search for a card to see what it actually sells for.</p>'
+    body = (f'<span class="eyebrow">Price check · confirmed sales over {fl}</span>'
+            + (search_form("/embed/price-check", term, category, grade, theme, size, accent, None, None, show_grade=True) if search
+               else f'<p class="title">{esc(term or "")}</p>')
+            + head
+            + f'<div class="foot"><span>eBay sales · best-offer listings excluded · n ≥ 3 to quote</span>{attribution("price-check")}</div>')
+    return shell(f"Price check: {term or ''}", body, theme, size, accent)
 
 
 # ------------------------------------------------------------------ badge
@@ -327,13 +445,12 @@ def embed_comps(request: Request, category: str = CATEGORY, count: int = Query(6
 @router.get("/badge/index.svg")
 def badge_index(tier: str = TIER, category: str = CATEGORY, theme: str = Query("light", pattern="^(light|dark)$"),
                 accent: str = ACCENT):
-    rows = _index_rows(tier, category, 14)
+    sus = suspended(tier)
+    rows = [] if sus else _index_rows(tier, category, 14)
     name = "BLUE CHIP INDEX" if tier == "bluechip" else "CARD INDEX"
     dark = theme == "dark"
     bg, ink, ink3 = ("#14110D", "#F3EFE8", "#9A928A") if dark else ("#FFFFFF", "#14110D", "#6E6862")
     up, down = ("#5BD97E", "#FF7B6B") if dark else ("#0a7d33", "#b3261e")
-    if suspended(tier):
-        rows = []
     if rows:
         last = rows[-1]
         val = f"{float(last['index_value']):.2f}"
@@ -342,19 +459,55 @@ def badge_index(tier: str = TIER, category: str = CATEGORY, theme: str = Query("
         chc = ink3 if ch is None else (up if float(ch) > 0.05 else (down if float(ch) < -0.05 else ink3))
         sub = esc(category or "all tracked cards") + " · " + esc(nice_date(last["as_of"]))
     else:
-        val, chs, chc, sub = "—", "suspended" if suspended(tier) else "building", ink3,             "publication paused: data quality" if suspended(tier) else "no settled data yet"
+        val, chs, chc = "—", "suspended" if sus else "building", ink3
+        sub = "publication paused: data quality" if sus else "no settled data yet"
+    font = "-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif"
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="260" height="64" viewBox="0 0 260 64" role="img" aria-label="RazMania {esc(name)} {val}">
 <rect width="260" height="64" rx="10" fill="{bg}" stroke="{ink3}" stroke-opacity=".35"/>
 <rect x="0" y="0" width="6" height="64" rx="3" fill="#{esc(accent)}"/>
-<text x="18" y="18" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="9" font-weight="700" letter-spacing="1.2" fill="#{esc(accent)}">RAZMANIA {esc(name)}</text>
-<text x="18" y="46" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="26" font-weight="800" fill="{ink}">{val}</text>
-<text x="252" y="34" text-anchor="end" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="11" font-weight="700" fill="{chc}">{chs}</text>
-<text x="252" y="50" text-anchor="end" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="8.5" fill="{ink3}">{sub}</text>
+<text x="18" y="18" font-family="{font}" font-size="9" font-weight="700" letter-spacing="1.2" fill="#{esc(accent)}">RAZMANIA {esc(name)}</text>
+<text x="18" y="46" font-family="{font}" font-size="26" font-weight="800" fill="{ink}">{val}</text>
+<text x="252" y="34" text-anchor="end" font-family="{font}" font-size="11" font-weight="700" fill="{chc}">{chs}</text>
+<text x="252" y="50" text-anchor="end" font-family="{font}" font-size="8.5" fill="{ink3}">{sub}</text>
 </svg>"""
     return Response(svg, media_type="image/svg+xml")
 
 
 # ------------------------------------------------------------------ store
+
+WIDGETS = [
+    {"id": "index", "name": "The Index", "h": 320, "preset": "tier=bluechip&days=90",
+     "tag": "Market level",
+     "blurb": "The card market as a single number, the way a stock index reports the stock market.",
+     "copy": "A trailing 7-day median of confirmed sales, rebased to 100, with a chart that fills whatever space you give it and a detail strip beneath: sales in the window, median price, and the period high and low. Choose the Blue Chip tier ($10,000+, settles in two days) or the broad market, and narrow it to one category if you like.",
+     "good": ["Sidebars and dashboards that want one honest number", "Category pages — Pokémon, Basketball, One Piece", "Newsletters that screenshot a daily figure"],
+     "data": "Published only once a day has fully settled. Never revised."},
+    {"id": "top-sales", "name": "Top Sales", "h": 340, "preset": "period=7&count=4",
+     "tag": "Live feed",
+     "blurb": "The biggest confirmed card sales, today or over the last week, with card images and links.",
+     "copy": "Every card in the list is a real completed sale over the floor, ranked by price, with the grade, category and date. Best-offer listings — where eBay shows the asking price, not what was paid — never appear. Filter to one category, choose how many to show, and switch the images off for a text-only list.",
+     "good": ["Homepages and hobby news sites", "Discord and forum embeds", "A “what sold today” block on a shop page"],
+     "data": "The $10,000+ tier is collected daily, so today's list is complete by the morning."},
+    {"id": "movers", "name": "Market Movers", "h": 320, "preset": "tier=bluechip&count=5",
+     "tag": "Momentum",
+     "blurb": "Which categories moved most this week, ranked and colour-coded.",
+     "copy": "Each category's own index, sorted by its 7-day change, with a bar for scale. It is the fastest way to answer “what's hot right now?” without opening a spreadsheet. Categories with too few sales to publish a reliable number are simply absent rather than shown with a noisy one.",
+     "good": ["Editorial sidebars and market commentary", "Weekly recap posts", "Investor-style dashboards"],
+     "data": "Drawn from the same settled index as the Index widget."},
+    {"id": "comps", "name": "Live Comps", "h": 360, "preset": "q=Charizard&count=4",
+     "tag": "Search",
+     "blurb": "Type any card, player or set and see its latest confirmed sales.",
+     "copy": "A search box and a live list of the most recent completed sales that match. Pre-fill it with a term — “Luka Doncic Prizm”, “Charizard 1st Edition” — so it opens on the exact card your page is about, and let readers search from there. Filter by category and grade, and pick how many results to show.",
+     "good": ["Card reviews, buying guides, set breakdowns", "Player pages on fan sites", "Anywhere readers ask “what did it actually sell for?”"],
+     "data": "Searches the full confirmed-sales table. Results are cached for half an hour."},
+    {"id": "price-check", "name": "Price Check", "h": 380, "preset": "q=Charizard&grade=PSA%2010",
+     "tag": "Valuation",
+     "blurb": "What a card is worth: the median, the typical range and how many sales back it up.",
+     "copy": "Search a card, optionally pick a grade, and get the median confirmed price, the middle half of the range, the highest sale and the sample size — plus the three most recent sales as evidence. If fewer than three sales match, it says so rather than inventing a price from two data points.",
+     "good": ["Marketplaces and consignment pages", "Collection trackers", "Any page where a reader is deciding whether to buy"],
+     "data": "n ≥ 3 to quote. Best-offer listings excluded, so the range is what people paid."},
+]
+
 
 @router.get("/widgets", response_class=HTMLResponse)
 def widget_store(request: Request):
@@ -362,8 +515,15 @@ def widget_store(request: Request):
     cats = [r["vertical"] for r in q("""SELECT DISTINCT vertical FROM mv_market_index
                                         WHERE settled AND vertical <> 'All' ORDER BY 1""")]
     fl = money(floor())
-    cfg = json.dumps({"base": base, "categories": cats, "floor": fl})
-    return HTMLResponse(STORE_HTML.replace("__CFG__", cfg))
+    cfg = json.dumps({"base": base, "categories": cats, "floor": fl, "widgets": WIDGETS})
+    cards = "".join(
+        f'<article class="card" data-w="{w["id"]}">'
+        f'<div class="pv"><iframe src="{base}/embed/{w["id"]}?{w["preset"]}&theme=light&size=m" title="{esc(w["name"])} preview" '
+        f'loading="lazy" style="height:{w["h"]}px"></iframe></div>'
+        f'<div class="cb"><span class="tag">{esc(w["tag"])}</span><h3>{esc(w["name"])}</h3><p>{esc(w["blurb"])}</p>'
+        f'<button class="use" data-w="{w["id"]}">Customise &amp; get code →</button></div></article>'
+        for w in WIDGETS)
+    return HTMLResponse(STORE_HTML.replace("__CFG__", cfg).replace("__CARDS__", cards).replace("__FLOOR__", esc(fl)))
 
 
 STORE_HTML = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -371,68 +531,85 @@ STORE_HTML = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>RazMania Widgets</title>
 <style>
 :root{--bg:#FBF9F5;--s1:#fff;--s2:#F2EDE4;--ink:#14110D;--ink2:#57514A;--ink3:#6E6862;--line:rgba(26,22,16,.11);--line2:rgba(26,22,16,.22);--gold:#9A6B00}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-a{color:inherit}
-.mast{padding:36px 28px 22px;border-bottom:1px solid var(--line2);max-width:1200px;margin:0 auto}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+a{color:inherit}h1,h2,h3{font-family:Georgia,"Times New Roman",serif;letter-spacing:-.01em}
+.container{max-width:1240px;margin:0 auto;padding:0 28px}
 .eyebrow{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
-h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(34px,5vw,52px);line-height:1;letter-spacing:-.02em;margin:8px 0 12px}
-.dek{color:var(--ink2);max-width:64ch;font-size:17px;margin:0}
-.wrap{display:grid;grid-template-columns:380px 1fr;gap:28px;max-width:1200px;margin:0 auto;padding:26px 28px 60px}
-@media(max-width:900px){.wrap{grid-template-columns:1fr}}
+.hero{background:#14110D;color:#F3EFE8;padding:56px 0 48px}
+.hero h1{font-size:clamp(36px,5.2vw,58px);line-height:1.02;margin:10px 0 14px;max-width:16ch}
+.hero .dek{font-size:18px;color:#CFC8BE;max-width:62ch;margin:0 0 26px}
+.hero .facts{display:flex;gap:28px;flex-wrap:wrap;font-size:13px;color:#9A928A}
+.hero .facts b{display:block;font-size:22px;color:#F3EFE8;font-family:Georgia,serif}
+.hero .eyebrow{color:#F5C518}
+.browse{padding:44px 0 10px}
+.browse h2{font-size:30px;margin:0 0 6px}.browse>.container>p{color:var(--ink2);margin:0 0 22px;max-width:70ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,300px);gap:22px;justify-content:center}
+.card{width:300px;background:var(--s1);border:1px solid var(--line2);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;cursor:pointer;transition:transform .12s,box-shadow .12s}
+.card:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(0,0,0,.08)}
+.card .pv{background:var(--s2);border-bottom:1px solid var(--line)}
+.card .pv iframe{display:block;width:300px;border:0;background:#fff;pointer-events:none}
+.card .cb{padding:14px 16px 16px;display:flex;flex-direction:column;gap:6px;flex:1}
+.tag{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
+.card h3{font-size:19px;margin:0}.card p{margin:0;color:var(--ink2);font-size:14px;flex:1}
+.use{margin-top:8px;align-self:flex-start;padding:8px 12px;border:1px solid var(--ink);border-radius:8px;background:transparent;font:inherit;font-size:13px;font-weight:700;cursor:pointer;color:var(--ink)}
+.use:hover{background:var(--ink);color:#fff}
+.configure{padding:48px 0 60px;border-top:1px solid var(--line2);margin-top:40px}
+.configure h2{font-size:30px;margin:0}
+.configure .lead{color:var(--ink2);max-width:72ch;margin:8px 0 6px}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:16px 0 26px;font-size:14px}
+.meta h4{margin:0 0 4px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.meta ul{margin:0;padding-left:18px;color:var(--ink2)}.meta p{margin:0;color:var(--ink2)}
+.wrap{display:grid;grid-template-columns:360px 1fr;gap:28px}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}.meta{grid-template-columns:1fr}}
 .panel{background:var(--s1);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
-h2{font-family:Georgia,serif;font-size:20px;margin:0 0 12px}
-.gallery{max-width:1200px;margin:0 auto;padding:24px 28px 0}
-.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
-.pick button{text-align:left;padding:0;border:1px solid var(--line2);border-radius:12px;background:#fff;cursor:pointer;font:inherit;color:inherit;overflow:hidden;transition:transform .12s,box-shadow .12s}
-.pick button:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.08)}
-.pick button[aria-pressed=true]{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}
-.pick b{display:block;font-size:14px;padding:10px 12px 0}.pick button>span:last-child{display:block;font-size:12px;color:var(--ink3);padding:2px 12px 12px}
-/* Each card is the widget itself: a real instance rendered at twice the card
-   size and scaled by half, so it is the live thing, not a picture of it. */
-.thumb{display:block;position:relative;width:100%;aspect-ratio:8/5;overflow:hidden;background:var(--s2);border-bottom:1px solid var(--line)}
-.thumb iframe{position:absolute;top:0;left:0;width:200%;height:200%;transform:scale(.5);transform-origin:0 0;border:0;pointer-events:none;background:#fff}
+.panel h3{font-size:18px;margin:0 0 6px}
 label{display:block;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin:12px 0 4px}
 input[type=text],input[type=number],select{width:100%;padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:#fff;font:inherit;color:inherit}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .seg{display:flex;gap:6px;flex-wrap:wrap}.seg button{padding:6px 10px;border:1px solid var(--line2);border-radius:999px;background:#fff;font:inherit;font-size:13px;cursor:pointer}
 .seg button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
-.chk{display:flex;gap:16px;flex-wrap:wrap;font-size:14px;margin-top:8px}.chk label{display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink);margin:0;font-size:14px}
-.preview{background:repeating-conic-gradient(var(--s2) 0 25%,transparent 0 50%) 0 0/24px 24px;border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;justify-content:center;align-items:flex-start;min-height:340px;overflow:auto}
+.chk{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px}.chk label{display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink);margin:0;font-size:14px}
+.preview{background:repeating-conic-gradient(var(--s2) 0 25%,transparent 0 50%) 0 0/24px 24px;border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;justify-content:center;align-items:flex-start;min-height:360px;overflow:auto}
 .preview iframe{border:0;border-radius:12px;background:#fff;box-shadow:0 8px 30px rgba(0,0,0,.12);max-width:100%}
-.code{margin-top:18px}
-.tabs{display:flex;gap:6px;margin-bottom:8px}.tabs button{padding:6px 12px;border:1px solid var(--line2);border-radius:8px 8px 0 0;background:#fff;font:inherit;font-size:13px;cursor:pointer}
+.code{margin-top:18px}.code h3{font-size:18px;margin:0 0 8px}
+.tabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}.tabs button{padding:6px 12px;border:1px solid var(--line2);border-radius:8px 8px 0 0;background:#fff;font:inherit;font-size:13px;cursor:pointer}
 .tabs button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
 pre{margin:0;background:#14110D;color:#F3EFE8;padding:14px 16px;border-radius:0 10px 10px 10px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow:auto}
 .copy{margin-top:8px;display:flex;gap:10px;align-items:center}
 .copy button{padding:8px 14px;border:0;border-radius:8px;background:var(--gold);color:#fff;font:inherit;font-weight:700;cursor:pointer}
 .copy span{font-size:13px;color:var(--ink3)}
-.terms{margin-top:22px;font-size:13px;color:var(--ink2);line-height:1.55;max-width:70ch}
-.terms b{color:var(--ink)}
 .badges{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.terms{border-top:1px solid var(--line2);padding:28px 0 48px;font-size:13.5px;color:var(--ink2);line-height:1.6}
+.terms .container{display:grid;grid-template-columns:1fr 1fr;gap:28px}@media(max-width:900px){.terms .container{grid-template-columns:1fr}}
+.terms b{color:var(--ink)}.terms p{margin:0 0 8px}
 </style></head><body>
-<header class="mast">
+<header class="hero"><div class="container">
 <span class="eyebrow">RazMania widgets</span>
-<h1>Put live card-market data on your site.</h1>
-<p class="dek">Four widgets built from confirmed eBay sales over <b id="fl"></b>, with best-offer listings excluded — the ones where eBay shows the asking price, not what was paid. Pick one, make it yours, paste one line of HTML. Free, no key, no JavaScript required on your page.</p>
-</header>
-<section class="gallery">
-<h2>1 · Choose a widget</h2>
-<div class="pick" id="pick">
-<button data-w="index" aria-pressed="true"><span class="thumb"><iframe tabindex="-1" aria-hidden="true" title=""></iframe></span><b>The Index</b><span>Blue Chip or broad market, with sparkline</span></button>
-<button data-w="top-sales"><span class="thumb"><iframe tabindex="-1" aria-hidden="true" title=""></iframe></span><b>Top Sales</b><span>Biggest confirmed sales, today or this week</span></button>
-<button data-w="movers"><span class="thumb"><iframe tabindex="-1" aria-hidden="true" title=""></iframe></span><b>Market Movers</b><span>Categories ranked by 7-day change</span></button>
-<button data-w="comps"><span class="thumb"><iframe tabindex="-1" aria-hidden="true" title=""></iframe></span><b>Live Comps</b><span>Latest sales for any card, player or set</span></button>
-</div>
-</section>
+<h1>Live card-market data, on your site, in one line.</h1>
+<p class="dek">Five widgets built from confirmed eBay sales over __FLOOR__, with best-offer listings excluded — the ones where eBay shows the asking price rather than what was paid. Pick one, make it yours, paste the code. Free with attribution, no key, no JavaScript on your page.</p>
+<div class="facts"><div><b>5</b>widgets</div><div><b>Daily</b>refresh, 05:00 ET</div><div><b>$0</b>with attribution</div><div><b>0 KB</b>of JavaScript on your page</div></div>
+</div></header>
+
+<section class="browse" id="browse"><div class="container">
+<h2>Browse widgets</h2>
+<p>Every preview below is the live widget itself, not a picture of it. Click one to customise it and copy the code.</p>
+<div class="grid" id="grid">__CARDS__</div>
+</div></section>
+
+<section class="configure" id="configure"><div class="container">
+<span class="eyebrow">Configure</span>
+<h2 id="cf-name"></h2>
+<p class="lead" id="cf-copy"></p>
+<div class="meta"><div><h4>Good for</h4><ul id="cf-good"></ul></div><div><h4>About the data</h4><p id="cf-data"></p></div></div>
 <div class="wrap">
 <aside class="panel">
-<h2>2 · Customise</h2>
+<h3>Options</h3>
 <div id="opts"></div>
 <label>Size</label>
 <div class="seg" id="sizes">
-<button data-s="300x200">Small</button><button data-s="400x300" aria-pressed="true">Medium</button><button data-s="600x380">Large</button><button data-s="100%x300">Wide</button><button data-s="custom">Custom</button>
+<button data-s="300x320">Small</button><button data-s="400x340" aria-pressed="true">Medium</button><button data-s="600x400">Large</button><button data-s="100%x340">Wide</button><button data-s="custom">Custom</button>
 </div>
-<div class="two" id="custom" hidden><div><label>Width</label><input type="number" id="cw" value="400" min="200" max="1200"></div><div><label>Height</label><input type="number" id="ch" value="300" min="120" max="1200"></div></div>
+<div class="two" id="custom" hidden><div><label>Width</label><input type="number" id="cw" value="400" min="220" max="1400"></div><div><label>Height</label><input type="number" id="ch" value="340" min="140" max="1400"></div></div>
 <label>Text size</label>
 <div class="seg" id="fs"><button data-f="s">Small</button><button data-f="m" aria-pressed="true">Medium</button><button data-f="l">Large</button></div>
 <label>Theme</label>
@@ -443,34 +620,43 @@ pre{margin:0;background:#14110D;color:#F3EFE8;padding:14px 16px;border-radius:0 
 <main>
 <div class="preview"><iframe id="pv" title="Widget preview"></iframe></div>
 <div class="code">
-<h2>3 · Copy the code</h2>
+<h3>Copy the code</h3>
 <div class="tabs" id="tabs"><button data-c="iframe" aria-pressed="true">Embed</button><button data-c="auto">Embed, auto-height</button><button data-c="badge">Image badge</button><button data-c="json">JSON API</button></div>
 <pre id="out"></pre>
 <div class="copy"><button id="cp">Copy</button><span id="hint"></span></div>
 <div class="badges" id="badges"></div>
 </div>
-<div class="terms">
-<p><b>Free to use, with attribution.</b> The numbers are published under CC BY 4.0. Every widget carries a small “RazMania Index · razmania.com” link; please leave it in place — it is the only thing we ask for. The widgets read a cached feed that refreshes daily, so they cost your page nothing and never slow it down.</p>
-<p><b>What the numbers are.</b> Confirmed eBay sales of trading-card singles over <span class="flx"></span>. Best-offer-accepted listings are excluded because eBay publishes the seller's asking price on those, not the sale. The Index is a trailing 7-day median rebased to 100, published only once a day has fully settled. <a href="https://razmania.com/index/">Methodology →</a></p>
-</div>
 </main>
 </div>
+</div></section>
+
+<footer class="terms"><div class="container">
+<div><p><b>Free to use, with attribution.</b> The numbers are published under CC BY 4.0. Every widget carries a small “RazMania Index · razmania.com” link; please leave it in place — it is the only thing we ask for. The widgets read a cached feed that refreshes daily, so they cost your page nothing and never slow it down.</p></div>
+<div><p><b>What the numbers are.</b> Confirmed eBay sales of trading-card singles over __FLOOR__. Best-offer-accepted listings are excluded because eBay publishes the seller's asking price on those, not the sale. The Index is a trailing 7-day median rebased to 100, published only once a day has fully settled, and a tier whose recent days fail the composition check says “suspended” rather than showing a stale number. <a href="https://razmania.com/index/">Full methodology →</a></p></div>
+</div></footer>
 <script>
-const CFG=__CFG__;document.getElementById('fl').textContent=CFG.floor;document.querySelectorAll('.flx').forEach(e=>e.textContent=CFG.floor);
-const S={w:'index',size:'400x300',cw:400,ch:300,fs:'m',theme:'light',accent:'9A6B00',code:'iframe',o:{}};
+const CFG=__CFG__;
+const S={w:'index',size:'400x340',cw:400,ch:340,fs:'m',theme:'light',accent:'9A6B00',code:'iframe',o:{}};
+const cats=[['','All'],...CFG.categories.map(c=>[c,c])];
+const grades=[['','Any grade'],['PSA 10','PSA 10'],['PSA 9','PSA 9'],['PSA 8','PSA 8'],['BGS 10','BGS 10'],['BGS 9.5','BGS 9.5'],['SGC 10','SGC 10'],['Raw','Raw']];
 const OPTS={
  index:[['tier','select','Index',[['bluechip','Blue Chip · $10,000+ · 2-day lag'],['all','Broad · '+CFG.floor+'+ · 4-day lag']],'bluechip'],
         ['category','select','Category',[['','All tracked cards'],...CFG.categories.map(c=>[c,c])],''],
         ['days','select','History',[['30','30 days'],['90','90 days'],['180','180 days'],['365','1 year']],'90'],
-        ['chart','check','Show sparkline',null,'1']],
+        ['chart','check','Show chart',null,'1']],
  'top-sales':[['period','select','Period',[['1','Today'],['3','Last 3 days'],['7','Last 7 days']],'1'],
-        ['category','select','Category',[['','All'],...CFG.categories.map(c=>[c,c])],''],
-        ['count','number','How many',[1,25],'5'],['images','check','Show card images',null,'1']],
+        ['category','select','Category',cats,''],['count','number','How many',[1,25],'5'],['images','check','Show card images',null,'1']],
  movers:[['tier','select','Index',[['all','Broad · '+CFG.floor+'+'],['bluechip','Blue Chip · $10,000+']],'all'],
         ['count','number','How many categories',[2,14],'6']],
- comps:[['q','text','Card, player or set','e.g. Charizard, Luka Doncic, Prizm','Charizard'],
-        ['category','select','Category',[['','All'],...CFG.categories.map(c=>[c,c])],''],
-        ['count','number','How many',[1,25],'6'],['images','check','Show card images',null,'1']]};
+ comps:[['q','text','Opens with this search','e.g. Charizard, Luka Doncic, Prizm','Charizard'],
+        ['category','select','Category',cats,''],['grade','select','Grade',grades,''],
+        ['count','number','How many',[1,25],'6'],['images','check','Show card images',null,'1'],['search','check','Let readers search',null,'1']],
+ 'price-check':[['q','text','Opens with this search','e.g. Charizard, Luka Doncic, Prizm','Charizard'],
+        ['grade','select','Grade',grades,'PSA 10'],['category','select','Category',cats,''],
+        ['days','select','Look back',[['30','30 days'],['90','90 days'],['180','180 days'],['365','1 year']],'90'],
+        ['search','check','Let readers search',null,'1']]};
+const SIZES={index:'400x340','top-sales':'400x380',movers:'400x340',comps:'400x400','price-check':'400x420'};
+function widget(){return CFG.widgets.find(w=>w.id===S.w)}
 function renderOpts(){const o=document.getElementById('opts');o.innerHTML='';S.o={};
  for(const [k,t,label,arg,def] of OPTS[S.w]){S.o[k]=def;
   if(t==='select'){o.insertAdjacentHTML('beforeend',`<label>${label}</label><select data-k="${k}">${arg.map(([v,l])=>`<option value="${v}" ${v===def?'selected':''}>${l}</option>`).join('')}</select>`)}
@@ -478,11 +664,17 @@ function renderOpts(){const o=document.getElementById('opts');o.innerHTML='';S.o
   else if(t==='text'){o.insertAdjacentHTML('beforeend',`<label>${label}</label><input type="text" data-k="${k}" value="${def}" placeholder="${arg}" maxlength="80">`)}
   else if(t==='check'){o.insertAdjacentHTML('beforeend',`<div class="chk"><label><input type="checkbox" data-k="${k}" ${def==='1'?'checked':''}> ${label}</label></div>`)}}
  o.querySelectorAll('[data-k]').forEach(el=>el.addEventListener('input',()=>{S.o[el.dataset.k]=el.type==='checkbox'?(el.checked?'1':'0'):el.value;update()}))}
+function renderCopy(){const w=widget();document.getElementById('cf-name').textContent=w.name;document.getElementById('cf-copy').textContent=w.copy;
+ document.getElementById('cf-good').innerHTML=w.good.map(g=>`<li>${g}</li>`).join('');document.getElementById('cf-data').textContent=w.data}
 function seg(id,attr,key){document.getElementById(id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
  [...b.parentNode.children].forEach(x=>x.setAttribute('aria-pressed',x===b));S[key]=b.dataset[attr];
  if(key==='size'){document.getElementById('custom').hidden=S.size!=='custom'}update()})}
-document.getElementById('pick').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
- [...b.parentNode.children].forEach(x=>x.setAttribute('aria-pressed',x===b));S.w=b.dataset.w;renderOpts();update()});
+function choose(id,scroll){S.w=id;const sz=SIZES[id]||'400x340';S.size=sz;
+ document.querySelectorAll('#sizes button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.s===sz));
+ if(!document.querySelector('#sizes button[aria-pressed=true]')){S.size='custom';document.querySelector('#sizes button[data-s=custom]').setAttribute('aria-pressed',true);const[w,h]=sz.split('x');S.cw=w;S.ch=h;document.getElementById('cw').value=w;document.getElementById('ch').value=h}
+ document.getElementById('custom').hidden=S.size!=='custom';
+ renderCopy();renderOpts();update();if(scroll)document.getElementById('configure').scrollIntoView({behavior:'smooth'})}
+document.getElementById('grid').addEventListener('click',e=>{const c=e.target.closest('.card');if(!c)return;choose(c.dataset.w,true)});
 seg('sizes','s','size');seg('fs','f','fs');seg('themes','t','theme');seg('tabs','c','code');
 document.getElementById('cw').addEventListener('input',e=>{S.cw=e.target.value;update()});
 document.getElementById('ch').addEventListener('input',e=>{S.ch=e.target.value;update()});
@@ -491,26 +683,21 @@ document.getElementById('accentx').addEventListener('input',e=>{if(/^[0-9a-fA-F]
 function dims(){if(S.size==='custom')return[S.cw,S.ch];const[w,h]=S.size.split('x');return[w,h]}
 function url(){const p=new URLSearchParams();for(const[k,v]of Object.entries(S.o)){if(v!==''&&v!=null)p.set(k,v)}
  p.set('theme',S.theme);p.set('size',S.fs);if(S.accent.toUpperCase()!=='9A6B00')p.set('accent',S.accent);return `${CFG.base}/embed/${S.w}?${p}`}
-function badgeUrl(){const p=new URLSearchParams();if(S.o.tier)p.set('tier',S.o.tier);if(S.o.category)p.set('category',S.o.category);if(S.theme==='dark')p.set('theme','dark');if(S.accent.toUpperCase()!=='9A6B00')p.set('accent',S.accent);return `${CFG.base}/badge/index.svg?${p}`}
-function jsonUrl(){const m={index:`/v1/index?tier=${S.o.tier||'bluechip'}`,'top-sales':`/v1/leaderboard?limit=${S.o.count||5}`,movers:`/v1/index?tier=${S.o.tier||'all'}`,comps:`/v1/search?q=${encodeURIComponent(S.o.q||'')}`};return CFG.base+m[S.w]}
-const TITLES={index:'RazMania Index','top-sales':'Biggest card sales today',movers:'Card market movers',comps:'Live card comps'};
-// The gallery cards are live widgets with sensible defaults. They follow the
-// chosen theme and accent so the gallery previews what you will actually get.
-const THUMB={index:'tier=bluechip&days=90','top-sales':'period=7&count=4',movers:'tier=bluechip&count=5',comps:'q=Charizard&count=4'};
-let thumbKey='';
-function renderThumbs(){const key=S.theme+S.accent;if(key===thumbKey)return;thumbKey=key;
- document.querySelectorAll('#pick button').forEach(b=>{const f=b.querySelector('iframe');
-  f.src=`${CFG.base}/embed/${b.dataset.w}?${THUMB[b.dataset.w]}&theme=${S.theme}&size=m${S.accent.toUpperCase()!=='9A6B00'?'&accent='+S.accent:''}`})}
-let t;function update(){clearTimeout(t);t=setTimeout(()=>{renderThumbs();const[w,h]=dims();const u=url();const pv=document.getElementById('pv');
+function badgeUrl(dark){const p=new URLSearchParams();if(S.o.tier)p.set('tier',S.o.tier);if(S.o.category)p.set('category',S.o.category);if(dark)p.set('theme','dark');if(S.accent.toUpperCase()!=='9A6B00')p.set('accent',S.accent);return `${CFG.base}/badge/index.svg?${p}`}
+function jsonUrl(){const m={index:`/v1/index?tier=${S.o.tier||'bluechip'}`,'top-sales':`/v1/leaderboard?limit=${S.o.count||5}`,movers:`/v1/index?tier=${S.o.tier||'all'}`,comps:`/v1/search?q=${encodeURIComponent(S.o.q||'')}`,'price-check':`/v1/search?q=${encodeURIComponent(S.o.q||'')}`};return CFG.base+m[S.w]}
+let t;function update(){clearTimeout(t);t=setTimeout(()=>{const[w,h]=dims();const u=url();const pv=document.getElementById('pv');
  pv.style.width=(w==='100%'?'100%':w+'px');pv.style.height=h+'px';if(pv.src!==u)pv.src=u;
- const wa=w==='100%'?'100%':w;let code='';
- if(S.code==='iframe')code=`<iframe src="${u}" width="${wa}" height="${h}" title="${TITLES[S.w]}" style="border:0;border-radius:12px;max-width:100%" loading="lazy"></iframe>`;
- else if(S.code==='auto')code=`<iframe src="${u}&_id=rzm1" id="rzm1" width="${wa}" height="${h}" title="${TITLES[S.w]}" style="border:0;border-radius:12px;max-width:100%" loading="lazy"></iframe>\n<script>addEventListener('message',e=>{if(e.data&&e.data.type==='rzm-resize'&&e.data.id==='rzm1')document.getElementById('rzm1').style.height=e.data.height+'px'})<\/script>`;
- else if(S.code==='badge')code=`<!-- HTML -->\n<a href="https://razmania.com/index/"><img src="${badgeUrl()}" alt="RazMania Index" width="260" height="64"></a>\n\n<!-- Markdown -->\n[![RazMania Index](${badgeUrl()})](https://razmania.com/index/)`;
+ const wa=w==='100%'?'100%':w;const title=widget().name+' · RazMania';let code='';
+ if(S.code==='iframe')code=`<iframe src="${u}" width="${wa}" height="${h}" title="${title}" style="border:0;border-radius:12px;max-width:100%" loading="lazy"></iframe>`;
+ else if(S.code==='auto')code=`<iframe src="${u}&_id=rzm1" id="rzm1" width="${wa}" height="${h}" title="${title}" style="border:0;border-radius:12px;max-width:100%" loading="lazy"></iframe>\n<script>addEventListener('message',e=>{if(e.data&&e.data.type==='rzm-resize'&&e.data.id==='rzm1')document.getElementById('rzm1').style.height=e.data.height+'px'})<\/script>`;
+ else if(S.code==='badge')code=`<!-- HTML -->\n<a href="https://razmania.com/index/"><img src="${badgeUrl(S.theme==='dark')}" alt="RazMania Index" width="260" height="64"></a>\n\n<!-- Markdown -->\n[![RazMania Index](${badgeUrl(S.theme==='dark')})](https://razmania.com/index/)`;
  else code=`# JSON, cached 30 min. Attribution required.\ncurl "${jsonUrl()}"`;
  document.getElementById('out').textContent=code;
- document.getElementById('badges').innerHTML=S.code==='badge'?`<img src="${badgeUrl()}" alt="" width="260" height="64"> <img src="${badgeUrl().replace(/theme=\w+&?/,'')}${badgeUrl().includes('?')&&!badgeUrl().endsWith('?')?'&':''}theme=dark" alt="" width="260" height="64">`:''},150)}
+ document.getElementById('badges').innerHTML=S.code==='badge'?`<img src="${badgeUrl(false)}" alt="" width="260" height="64"> <img src="${badgeUrl(true)}" alt="" width="260" height="64">`:''},150)}
 document.getElementById('cp').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(document.getElementById('out').textContent);document.getElementById('hint').textContent='Copied.'}catch(e){document.getElementById('hint').textContent='Select the code and copy it.'}setTimeout(()=>document.getElementById('hint').textContent='',1800)});
 addEventListener('message',e=>{if(e.data&&e.data.type==='rzm-resize'&&S.code==='auto'){document.getElementById('pv').style.height=e.data.height+'px'}});
-renderOpts();update();
+choose('index',false);
+// When hosted inside razmania.com/widgets, report height so the host iframe fits.
+(function(){function h(){try{parent.postMessage({type:'rzm-store-resize',height:document.documentElement.scrollHeight},'*')}catch(e){}}
+addEventListener('load',h);addEventListener('resize',h);new MutationObserver(h).observe(document.body,{childList:true,subtree:true,attributes:true});setInterval(h,1500)})();
 </script></body></html>"""

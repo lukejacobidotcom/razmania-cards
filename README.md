@@ -325,8 +325,16 @@ needs no JavaScript and nothing it can block. Routes live in `api/embeds.py`.
 | The Index | `/embed/index` | `tier`, `category`, `days`, `chart` |
 | Top Sales | `/embed/top-sales` | `period` (1–7 days), `category`, `count`, `images` |
 | Market Movers | `/embed/movers` | `tier`, `count` |
-| Live Comps | `/embed/comps` | `q` (card / player / set), `category`, `count`, `images` |
+| Live Comps | `/embed/comps` | `q` (card / player / set), `category`, `grade`, `count`, `images`, `search` (a search box readers can use) |
+| Price Check | `/embed/price-check` | `q`, `grade`, `category`, `days`, `search` — median, typical range, highest, n; quotes only at n ≥ 3 |
 | Image badge | `/badge/index.svg` | `tier`, `category`, `theme` — for READMEs and signatures |
+
+The store lives at **razmania.com/widgets** via the `[razmania_widgets]`
+shortcode in `wordpress/razmania-index/`, which hosts the API's `/widgets` page
+full-width and sizes it from the height message the store posts. The browse
+grid shows each widget as a live 300px instance, not a screenshot; the
+configure section carries per-widget copy (what it is, who it's for, what the
+data is), the options, a live preview and the code.
 
 Common to all: `theme=light|dark|auto` (auto follows the visitor's OS), `size=s|m|l`
 (text scale), `accent=RRGGBB`. Size is the iframe's own width/height; the store
