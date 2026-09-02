@@ -381,10 +381,16 @@ h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(34px,5vw,52px);li
 @media(max-width:900px){.wrap{grid-template-columns:1fr}}
 .panel{background:var(--s1);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
 h2{font-family:Georgia,serif;font-size:20px;margin:0 0 12px}
-.pick{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
-.pick button{text-align:left;padding:10px 12px;border:1px solid var(--line2);border-radius:10px;background:var(--bg);cursor:pointer;font:inherit;color:inherit}
-.pick button b{display:block;font-size:14px}.pick button span{font-size:12px;color:var(--ink3)}
-.pick button[aria-pressed=true]{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold);background:#fff}
+.gallery{max-width:1200px;margin:0 auto;padding:24px 28px 0}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.pick button{text-align:left;padding:0;border:1px solid var(--line2);border-radius:12px;background:#fff;cursor:pointer;font:inherit;color:inherit;overflow:hidden;transition:transform .12s,box-shadow .12s}
+.pick button:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.08)}
+.pick button[aria-pressed=true]{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}
+.pick b{display:block;font-size:14px;padding:10px 12px 0}.pick button>span:last-child{display:block;font-size:12px;color:var(--ink3);padding:2px 12px 12px}
+/* Each card is the widget itself: a real instance rendered at twice the card
+   size and scaled by half, so it is the live thing, not a picture of it. */
+.thumb{display:block;position:relative;width:100%;aspect-ratio:8/5;overflow:hidden;background:var(--s2);border-bottom:1px solid var(--line)}
+.thumb iframe{position:absolute;top:0;left:0;width:200%;height:200%;transform:scale(.5);transform-origin:0 0;border:0;pointer-events:none;background:#fff}
 label{display:block;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin:12px 0 4px}
 input[type=text],input[type=number],select{width:100%;padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:#fff;font:inherit;color:inherit}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -409,15 +415,17 @@ pre{margin:0;background:#14110D;color:#F3EFE8;padding:14px 16px;border-radius:0 
 <h1>Put live card-market data on your site.</h1>
 <p class="dek">Four widgets built from confirmed eBay sales over <b id="fl"></b>, with best-offer listings excluded — the ones where eBay shows the asking price, not what was paid. Pick one, make it yours, paste one line of HTML. Free, no key, no JavaScript required on your page.</p>
 </header>
-<div class="wrap">
-<aside class="panel">
+<section class="gallery">
 <h2>1 · Choose a widget</h2>
 <div class="pick" id="pick">
-<button data-w="index" aria-pressed="true"><b>The Index</b><span>Blue Chip or broad market, with sparkline</span></button>
-<button data-w="top-sales"><b>Top Sales</b><span>Biggest confirmed sales today</span></button>
-<button data-w="movers"><b>Market Movers</b><span>Categories by 7-day change</span></button>
-<button data-w="comps"><b>Live Comps</b><span>Latest sales for any card or player</span></button>
+<button data-w="index" aria-pressed="true"><span class="thumb"><iframe tabindex="-1" aria-hidden="true" title=""></iframe></span><b>The Index</b><span>Blue Chip or broad market, with sparkline</span></button>
+<button data-w="top-sales"><span class="thumb"><iframe tabindex="-1" aria-hidden="true" title=""></iframe></span><b>Top Sales</b><span>Biggest confirmed sales, today or this week</span></button>
+<button data-w="movers"><span class="thumb"><iframe tabindex="-1" aria-hidden="true" title=""></iframe></span><b>Market Movers</b><span>Categories ranked by 7-day change</span></button>
+<button data-w="comps"><span class="thumb"><iframe tabindex="-1" aria-hidden="true" title=""></iframe></span><b>Live Comps</b><span>Latest sales for any card, player or set</span></button>
 </div>
+</section>
+<div class="wrap">
+<aside class="panel">
 <h2>2 · Customise</h2>
 <div id="opts"></div>
 <label>Size</label>
@@ -486,7 +494,14 @@ function url(){const p=new URLSearchParams();for(const[k,v]of Object.entries(S.o
 function badgeUrl(){const p=new URLSearchParams();if(S.o.tier)p.set('tier',S.o.tier);if(S.o.category)p.set('category',S.o.category);if(S.theme==='dark')p.set('theme','dark');if(S.accent.toUpperCase()!=='9A6B00')p.set('accent',S.accent);return `${CFG.base}/badge/index.svg?${p}`}
 function jsonUrl(){const m={index:`/v1/index?tier=${S.o.tier||'bluechip'}`,'top-sales':`/v1/leaderboard?limit=${S.o.count||5}`,movers:`/v1/index?tier=${S.o.tier||'all'}`,comps:`/v1/search?q=${encodeURIComponent(S.o.q||'')}`};return CFG.base+m[S.w]}
 const TITLES={index:'RazMania Index','top-sales':'Biggest card sales today',movers:'Card market movers',comps:'Live card comps'};
-let t;function update(){clearTimeout(t);t=setTimeout(()=>{const[w,h]=dims();const u=url();const pv=document.getElementById('pv');
+// The gallery cards are live widgets with sensible defaults. They follow the
+// chosen theme and accent so the gallery previews what you will actually get.
+const THUMB={index:'tier=bluechip&days=90','top-sales':'period=7&count=4',movers:'tier=bluechip&count=5',comps:'q=Charizard&count=4'};
+let thumbKey='';
+function renderThumbs(){const key=S.theme+S.accent;if(key===thumbKey)return;thumbKey=key;
+ document.querySelectorAll('#pick button').forEach(b=>{const f=b.querySelector('iframe');
+  f.src=`${CFG.base}/embed/${b.dataset.w}?${THUMB[b.dataset.w]}&theme=${S.theme}&size=m${S.accent.toUpperCase()!=='9A6B00'?'&accent='+S.accent:''}`})}
+let t;function update(){clearTimeout(t);t=setTimeout(()=>{renderThumbs();const[w,h]=dims();const u=url();const pv=document.getElementById('pv');
  pv.style.width=(w==='100%'?'100%':w+'px');pv.style.height=h+'px';if(pv.src!==u)pv.src=u;
  const wa=w==='100%'?'100%':w;let code='';
  if(S.code==='iframe')code=`<iframe src="${u}" width="${wa}" height="${h}" title="${TITLES[S.w]}" style="border:0;border-radius:12px;max-width:100%" loading="lazy"></iframe>`;
