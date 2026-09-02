@@ -313,6 +313,43 @@ The plugin also exposes `/wp-json/razmania/v1/<endpoint>` as a same-origin
 proxy, so interactive JS can filter and sort without CORS and without ever
 seeing the API key.
 
+## The widget store
+
+`GET /widgets` on the API service is a configurator: pick a widget, set size,
+theme, accent and options, watch the live preview, copy one line of HTML.
+Everything is server-rendered into a self-contained document, so the host page
+needs no JavaScript and nothing it can block. Routes live in `api/embeds.py`.
+
+| Widget | Route | Options |
+|---|---|---|
+| The Index | `/embed/index` | `tier`, `category`, `days`, `chart` |
+| Top Sales | `/embed/top-sales` | `period` (1–7 days), `category`, `count`, `images` |
+| Market Movers | `/embed/movers` | `tier`, `count` |
+| Live Comps | `/embed/comps` | `q` (card / player / set), `category`, `count`, `images` |
+| Image badge | `/badge/index.svg` | `tier`, `category`, `theme` — for READMEs and signatures |
+
+Common to all: `theme=light|dark|auto` (auto follows the visitor's OS), `size=s|m|l`
+(text scale), `accent=RRGGBB`. Size is the iframe's own width/height; the store
+offers presets, custom dimensions, and an auto-height snippet driven by a
+6-line `postMessage` in the widget.
+
+Rules that are not options:
+
+- **The attribution link stays.** It is the reason the store exists. Every
+  widget links to razmania.com with `utm_campaign=<widget>`, so the value of
+  each widget is measurable in analytics.
+- **The floor is printed on every widget.** The database cannot publish a
+  number below it, but a widget on someone else's site can easily mislabel one.
+- **These routes sit outside the `/v1` API-key guard on purpose** — they are the
+  public product — and read the same materialized views, so no page view on
+  any host site triggers an aggregation. They inherit the CDN cache headers.
+- Every parameter is regex-bounded; the comps search term is the only free
+  text and is HTML-escaped on output (a `<script>` in `q` comes back as text).
+
+Vanity domain: point `widgets.razmania.com` at the API service in Render's
+custom-domain settings and the store's generated snippets pick it up
+automatically — they use the request's own host.
+
 ## API
 
 | Endpoint | Purpose |
@@ -321,6 +358,7 @@ seeing the API key.
 | `GET /v1/stats` | Site-wide header numbers. |
 | `GET /v1/verticals` | Per-vertical, this week vs last week. |
 | `GET /v1/leaderboard?vertical=&limit=&offset=` | Biggest confirmed sales, 7 days. |
+| `GET /widgets`, `/embed/*`, `/badge/index.svg` | The widget store and its embeds (public, no key). See above. |
 | `GET /v1/index?tier=&vertical=&days=&include_unsettled=` | The RazMania Index. `tier=all` (default, 4-day lag) or `tier=bluechip` (2-day lag). Settled points only unless you opt in. |
 | `GET /v1/daily?vertical=&days=` | Daily series for charts. |
 | `GET /v1/players?q=&limit=` | Player index. |

@@ -10,46 +10,26 @@ service only serves it.
 """
 
 import os
-from contextlib import contextmanager
 from typing import Optional
 
-import psycopg2
-import psycopg2.extras
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from psycopg2 import pool
 
-DSN = os.environ["DATABASE_URL"]
+from api.db import q            # one pool, one cursor, shared with the embeds
+from api.embeds import router as embeds_router
+
 ALLOWED = [o.strip() for o in os.environ.get(
     "ALLOWED_ORIGINS", "https://razmania.com,https://www.razmania.com").split(",") if o.strip()]
 API_KEY = os.environ.get("API_KEY")            # optional; unset = open read API
 CACHE_SECONDS = int(os.environ.get("CACHE_SECONDS", "1800"))
 
-# Data changes once a day. A tiny pool is plenty and keeps us inside the
-# connection limit of Render's smallest Postgres plan.
-POOL = pool.ThreadedConnectionPool(1, 6, DSN)
-
-app = FastAPI(title="RazMania Card Data API", version="1.0")
+app = FastAPI(title="RazMania Card Data API", version="1.1")
 app.add_middleware(
     CORSMiddleware, allow_origins=ALLOWED, allow_methods=["GET"], allow_headers=["*"])
-
-
-@contextmanager
-def cursor():
-    conn = POOL.getconn()
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            yield cur
-        conn.rollback()          # read-only: never leave a transaction open
-    finally:
-        POOL.putconn(conn)
-
-
-def q(sql, params=()):
-    with cursor() as cur:
-        cur.execute(sql, params)
-        return cur.fetchall()
+# /embed, /badge and /widgets: public, server-rendered, outside the /v1 key
+# guard on purpose - they are the product other sites paste in.
+app.include_router(embeds_router)
 
 
 @app.middleware("http")
