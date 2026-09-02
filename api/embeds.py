@@ -516,14 +516,43 @@ def widget_store(request: Request):
                                         WHERE settled AND vertical <> 'All' ORDER BY 1""")]
     fl = money(floor())
     cfg = json.dumps({"base": base, "categories": cats, "floor": fl, "widgets": WIDGETS})
-    cards = "".join(
-        f'<article class="card" data-w="{w["id"]}">'
-        f'<div class="pv"><iframe src="{base}/embed/{w["id"]}?{w["preset"]}&theme=light&size=m" title="{esc(w["name"])} preview" '
-        f'loading="lazy" style="height:{w["h"]}px"></iframe></div>'
-        f'<div class="cb"><span class="tag">{esc(w["tag"])}</span><h3>{esc(w["name"])}</h3><p>{esc(w["blurb"])}</p>'
-        f'<button class="use" data-w="{w["id"]}">Customise &amp; get code →</button></div></article>'
-        for w in WIDGETS)
-    return HTMLResponse(STORE_HTML.replace("__CFG__", cfg).replace("__CARDS__", cards).replace("__FLOOR__", esc(fl)))
+    nav = "".join(f'<a href="#w-{w["id"]}">{esc(w["name"])}</a>' for w in WIDGETS)
+    # Every widget gets the same full-width section: copy, options, a live
+    # preview the width of the column, the code. One after another.
+    sections = "".join(SECTION.format(
+        id=w["id"], i=i + 1, n=len(WIDGETS), tag=esc(w["tag"]), name=esc(w["name"]),
+        copy=esc(w["copy"]), good="".join(f"<li>{esc(g)}</li>" for g in w["good"]),
+        data=esc(w["data"]), h=w["h"], h2=w["h"] + 40,
+        badge='<button data-c="badge">Image badge</button>' if w["id"] == "index" else "",
+    ) for i, w in enumerate(WIDGETS))
+    return HTMLResponse(STORE_HTML.replace("__CFG__", cfg).replace("__SECTIONS__", sections)
+                        .replace("__NAV__", nav).replace("__FLOOR__", esc(fl)))
+
+
+SECTION = """
+<section class="wsec" id="w-{id}" data-w="{id}"><div class="container">
+<span class="eyebrow">{tag} · widget {i} of {n}</span>
+<h2>{name}</h2>
+<p class="lead">{copy}</p>
+<div class="meta"><div><h4>Good for</h4><ul>{good}</ul></div><div><h4>About the data</h4><p>{data}</p></div></div>
+<div class="wrap">
+<aside class="panel"><h3>Options</h3><div class="opts"></div>
+<label>Size</label>
+<div class="seg sizes"><button data-s="300x{h}">Small</button><button data-s="440x{h}">Medium</button><button data-s="640x{h2}">Large</button><button data-s="100%x{h2}" aria-pressed="true">Full width</button><button data-s="custom">Custom</button></div>
+<div class="two custom" hidden><div><label>Width</label><input type="number" class="cw" value="600" min="220" max="1400"></div><div><label>Height</label><input type="number" class="ch" value="{h2}" min="140" max="1400"></div></div>
+<label>Text size</label><div class="seg fs"><button data-f="s">Small</button><button data-f="m" aria-pressed="true">Medium</button><button data-f="l">Large</button></div>
+<label>Theme</label><div class="seg themes"><button data-t="light" aria-pressed="true">Light</button><button data-t="dark">Dark</button><button data-t="auto">Match visitor</button></div>
+<label>Accent colour</label><div class="two"><input type="color" class="accent" value="#9A6B00" style="height:38px;padding:2px;border:1px solid var(--line2);border-radius:8px;background:#fff"><input type="text" class="accentx" value="9A6B00" maxlength="6"></div>
+</aside>
+<main>
+<div class="preview"><iframe class="pv" title="{name} preview" loading="lazy"></iframe></div>
+<div class="code"><h3>Copy the code</h3>
+<div class="seg tabs"><button data-c="iframe" aria-pressed="true">Embed</button><button data-c="auto">Embed, auto-height</button>{badge}<button data-c="json">JSON API</button></div>
+<pre class="out"></pre>
+<div class="copy"><button class="cp">Copy</button><span class="hint"></span></div>
+<div class="badges"></div></div>
+</main></div>
+</div></section>"""
 
 
 STORE_HTML = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -531,50 +560,40 @@ STORE_HTML = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>RazMania Widgets</title>
 <style>
 :root{--bg:#FBF9F5;--s1:#fff;--s2:#F2EDE4;--ink:#14110D;--ink2:#57514A;--ink3:#6E6862;--line:rgba(26,22,16,.11);--line2:rgba(26,22,16,.22);--gold:#9A6B00}
-*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 a{color:inherit}h1,h2,h3{font-family:Georgia,"Times New Roman",serif;letter-spacing:-.01em}
 .container{max-width:1240px;margin:0 auto;padding:0 28px}
 .eyebrow{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
-.hero{background:#14110D;color:#F3EFE8;padding:56px 0 48px}
+.hero{background:#14110D;color:#F3EFE8;padding:56px 0 40px}
 .hero h1{font-size:clamp(36px,5.2vw,58px);line-height:1.02;margin:10px 0 14px;max-width:16ch}
 .hero .dek{font-size:18px;color:#CFC8BE;max-width:62ch;margin:0 0 26px}
-.hero .facts{display:flex;gap:28px;flex-wrap:wrap;font-size:13px;color:#9A928A}
+.hero .facts{display:flex;gap:28px;flex-wrap:wrap;font-size:13px;color:#9A928A;margin-bottom:30px}
 .hero .facts b{display:block;font-size:22px;color:#F3EFE8;font-family:Georgia,serif}
 .hero .eyebrow{color:#F5C518}
-.browse{padding:44px 0 10px}
-.browse h2{font-size:30px;margin:0 0 6px}.browse>.container>p{color:var(--ink2);margin:0 0 22px;max-width:70ch}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,300px);gap:22px;justify-content:center}
-.card{width:300px;background:var(--s1);border:1px solid var(--line2);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;cursor:pointer;transition:transform .12s,box-shadow .12s}
-.card:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(0,0,0,.08)}
-.card .pv{background:var(--s2);border-bottom:1px solid var(--line)}
-.card .pv iframe{display:block;width:300px;border:0;background:#fff;pointer-events:none}
-.card .cb{padding:14px 16px 16px;display:flex;flex-direction:column;gap:6px;flex:1}
-.tag{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
-.card h3{font-size:19px;margin:0}.card p{margin:0;color:var(--ink2);font-size:14px;flex:1}
-.use{margin-top:8px;align-self:flex-start;padding:8px 12px;border:1px solid var(--ink);border-radius:8px;background:transparent;font:inherit;font-size:13px;font-weight:700;cursor:pointer;color:var(--ink)}
-.use:hover{background:var(--ink);color:#fff}
-.configure{padding:48px 0 60px;border-top:1px solid var(--line2);margin-top:40px}
-.configure h2{font-size:30px;margin:0}
-.configure .lead{color:var(--ink2);max-width:72ch;margin:8px 0 6px}
-.meta{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:16px 0 26px;font-size:14px}
+.nav{display:flex;gap:8px;flex-wrap:wrap}.nav a{padding:8px 14px;border:1px solid rgba(255,255,255,.22);border-radius:999px;text-decoration:none;font-size:13px;color:#F3EFE8}
+.nav a:hover{background:#F5C518;color:#14110D;border-color:#F5C518}
+.wsec{padding:56px 0 48px;border-top:1px solid var(--line2)}
+.wsec h2{font-size:34px;margin:6px 0 0}
+.lead{color:var(--ink2);max-width:72ch;margin:10px 0 6px;font-size:16px}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:16px 0 24px;font-size:14px;max-width:900px}
 .meta h4{margin:0 0 4px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
 .meta ul{margin:0;padding-left:18px;color:var(--ink2)}.meta p{margin:0;color:var(--ink2)}
-.wrap{display:grid;grid-template-columns:360px 1fr;gap:28px}
+.wrap{display:grid;grid-template-columns:320px 1fr;gap:26px;align-items:start}
 @media(max-width:900px){.wrap{grid-template-columns:1fr}.meta{grid-template-columns:1fr}}
-.panel{background:var(--s1);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
-.panel h3{font-size:18px;margin:0 0 6px}
-label{display:block;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin:12px 0 4px}
+.panel{background:var(--s1);border:1px solid var(--line);border-radius:14px;padding:16px 18px;position:sticky;top:16px}
+.panel h3{font-size:17px;margin:0 0 4px}
+label{display:block;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);margin:12px 0 4px}
 input[type=text],input[type=number],select{width:100%;padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:#fff;font:inherit;color:inherit}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .seg{display:flex;gap:6px;flex-wrap:wrap}.seg button{padding:6px 10px;border:1px solid var(--line2);border-radius:999px;background:#fff;font:inherit;font-size:13px;cursor:pointer}
 .seg button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.seg.tabs button{border-radius:8px}
 .chk{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px}.chk label{display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink);margin:0;font-size:14px}
-.preview{background:repeating-conic-gradient(var(--s2) 0 25%,transparent 0 50%) 0 0/24px 24px;border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;justify-content:center;align-items:flex-start;min-height:360px;overflow:auto}
+.preview{background:repeating-conic-gradient(var(--s2) 0 25%,transparent 0 50%) 0 0/24px 24px;border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
 .preview iframe{border:0;border-radius:12px;background:#fff;box-shadow:0 8px 30px rgba(0,0,0,.12);max-width:100%}
-.code{margin-top:18px}.code h3{font-size:18px;margin:0 0 8px}
-.tabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}.tabs button{padding:6px 12px;border:1px solid var(--line2);border-radius:8px 8px 0 0;background:#fff;font:inherit;font-size:13px;cursor:pointer}
-.tabs button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
-pre{margin:0;background:#14110D;color:#F3EFE8;padding:14px 16px;border-radius:0 10px 10px 10px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow:auto}
+.code{margin-top:16px}.code h3{font-size:17px;margin:0 0 8px}
+pre{margin:8px 0 0;background:#14110D;color:#F3EFE8;padding:14px 16px;border-radius:10px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow:auto}
 .copy{margin-top:8px;display:flex;gap:10px;align-items:center}
 .copy button{padding:8px 14px;border:0;border-radius:8px;background:var(--gold);color:#fff;font:inherit;font-weight:700;cursor:pointer}
 .copy span{font-size:13px;color:var(--ink3)}
@@ -586,57 +605,17 @@ pre{margin:0;background:#14110D;color:#F3EFE8;padding:14px 16px;border-radius:0 
 <header class="hero"><div class="container">
 <span class="eyebrow">RazMania widgets</span>
 <h1>Live card-market data, on your site, in one line.</h1>
-<p class="dek">Five widgets built from confirmed eBay sales over __FLOOR__, with best-offer listings excluded — the ones where eBay shows the asking price rather than what was paid. Pick one, make it yours, paste the code. Free with attribution, no key, no JavaScript on your page.</p>
+<p class="dek">Five widgets built from confirmed eBay sales over __FLOOR__, with best-offer listings excluded — the ones where eBay shows the asking price rather than what was paid. Every preview below is the live widget. Make it yours, paste the code. Free with attribution, no key, no JavaScript on your page.</p>
 <div class="facts"><div><b>5</b>widgets</div><div><b>Daily</b>refresh, 05:00 ET</div><div><b>$0</b>with attribution</div><div><b>0 KB</b>of JavaScript on your page</div></div>
+<nav class="nav">__NAV__</nav>
 </div></header>
-
-<section class="browse" id="browse"><div class="container">
-<h2>Browse widgets</h2>
-<p>Every preview below is the live widget itself, not a picture of it. Click one to customise it and copy the code.</p>
-<div class="grid" id="grid">__CARDS__</div>
-</div></section>
-
-<section class="configure" id="configure"><div class="container">
-<span class="eyebrow">Configure</span>
-<h2 id="cf-name"></h2>
-<p class="lead" id="cf-copy"></p>
-<div class="meta"><div><h4>Good for</h4><ul id="cf-good"></ul></div><div><h4>About the data</h4><p id="cf-data"></p></div></div>
-<div class="wrap">
-<aside class="panel">
-<h3>Options</h3>
-<div id="opts"></div>
-<label>Size</label>
-<div class="seg" id="sizes">
-<button data-s="300x320">Small</button><button data-s="400x340" aria-pressed="true">Medium</button><button data-s="600x400">Large</button><button data-s="100%x340">Wide</button><button data-s="custom">Custom</button>
-</div>
-<div class="two" id="custom" hidden><div><label>Width</label><input type="number" id="cw" value="400" min="220" max="1400"></div><div><label>Height</label><input type="number" id="ch" value="340" min="140" max="1400"></div></div>
-<label>Text size</label>
-<div class="seg" id="fs"><button data-f="s">Small</button><button data-f="m" aria-pressed="true">Medium</button><button data-f="l">Large</button></div>
-<label>Theme</label>
-<div class="seg" id="themes"><button data-t="light" aria-pressed="true">Light</button><button data-t="dark">Dark</button><button data-t="auto">Match visitor</button></div>
-<label>Accent colour</label>
-<div class="two"><input type="color" id="accent" value="#9A6B00" style="height:38px;padding:2px;border:1px solid var(--line2);border-radius:8px;background:#fff"><input type="text" id="accentx" value="9A6B00" maxlength="6" pattern="[0-9a-fA-F]{6}"></div>
-</aside>
-<main>
-<div class="preview"><iframe id="pv" title="Widget preview"></iframe></div>
-<div class="code">
-<h3>Copy the code</h3>
-<div class="tabs" id="tabs"><button data-c="iframe" aria-pressed="true">Embed</button><button data-c="auto">Embed, auto-height</button><button data-c="badge">Image badge</button><button data-c="json">JSON API</button></div>
-<pre id="out"></pre>
-<div class="copy"><button id="cp">Copy</button><span id="hint"></span></div>
-<div class="badges" id="badges"></div>
-</div>
-</main>
-</div>
-</div></section>
-
+__SECTIONS__
 <footer class="terms"><div class="container">
 <div><p><b>Free to use, with attribution.</b> The numbers are published under CC BY 4.0. Every widget carries a small “RazMania Index · razmania.com” link; please leave it in place — it is the only thing we ask for. The widgets read a cached feed that refreshes daily, so they cost your page nothing and never slow it down.</p></div>
 <div><p><b>What the numbers are.</b> Confirmed eBay sales of trading-card singles over __FLOOR__. Best-offer-accepted listings are excluded because eBay publishes the seller's asking price on those, not the sale. The Index is a trailing 7-day median rebased to 100, published only once a day has fully settled, and a tier whose recent days fail the composition check says “suspended” rather than showing a stale number. <a href="https://razmania.com/index/">Full methodology →</a></p></div>
 </div></footer>
 <script>
 const CFG=__CFG__;
-const S={w:'index',size:'400x340',cw:400,ch:340,fs:'m',theme:'light',accent:'9A6B00',code:'iframe',o:{}};
 const cats=[['','All'],...CFG.categories.map(c=>[c,c])];
 const grades=[['','Any grade'],['PSA 10','PSA 10'],['PSA 9','PSA 9'],['PSA 8','PSA 8'],['BGS 10','BGS 10'],['BGS 9.5','BGS 9.5'],['SGC 10','SGC 10'],['Raw','Raw']];
 const OPTS={
@@ -644,10 +623,10 @@ const OPTS={
         ['category','select','Category',[['','All tracked cards'],...CFG.categories.map(c=>[c,c])],''],
         ['days','select','History',[['30','30 days'],['90','90 days'],['180','180 days'],['365','1 year']],'90'],
         ['chart','check','Show chart',null,'1']],
- 'top-sales':[['period','select','Period',[['1','Today'],['3','Last 3 days'],['7','Last 7 days']],'1'],
-        ['category','select','Category',cats,''],['count','number','How many',[1,25],'5'],['images','check','Show card images',null,'1']],
- movers:[['tier','select','Index',[['all','Broad · '+CFG.floor+'+'],['bluechip','Blue Chip · $10,000+']],'all'],
-        ['count','number','How many categories',[2,14],'6']],
+ 'top-sales':[['period','select','Period',[['1','Today'],['3','Last 3 days'],['7','Last 7 days']],'7'],
+        ['category','select','Category',cats,''],['count','number','How many',[1,25],'6'],['images','check','Show card images',null,'1']],
+ movers:[['tier','select','Index',[['bluechip','Blue Chip · $10,000+'],['all','Broad · '+CFG.floor+'+']],'bluechip'],
+        ['count','number','How many categories',[2,14],'8']],
  comps:[['q','text','Opens with this search','e.g. Charizard, Luka Doncic, Prizm','Charizard'],
         ['category','select','Category',cats,''],['grade','select','Grade',grades,''],
         ['count','number','How many',[1,25],'6'],['images','check','Show card images',null,'1'],['search','check','Let readers search',null,'1']],
@@ -655,49 +634,39 @@ const OPTS={
         ['grade','select','Grade',grades,'PSA 10'],['category','select','Category',cats,''],
         ['days','select','Look back',[['30','30 days'],['90','90 days'],['180','180 days'],['365','1 year']],'90'],
         ['search','check','Let readers search',null,'1']]};
-const SIZES={index:'400x340','top-sales':'400x380',movers:'400x340',comps:'400x400','price-check':'400x420'};
-function widget(){return CFG.widgets.find(w=>w.id===S.w)}
-function renderOpts(){const o=document.getElementById('opts');o.innerHTML='';S.o={};
- for(const [k,t,label,arg,def] of OPTS[S.w]){S.o[k]=def;
-  if(t==='select'){o.insertAdjacentHTML('beforeend',`<label>${label}</label><select data-k="${k}">${arg.map(([v,l])=>`<option value="${v}" ${v===def?'selected':''}>${l}</option>`).join('')}</select>`)}
-  else if(t==='number'){o.insertAdjacentHTML('beforeend',`<label>${label}</label><input type="number" data-k="${k}" value="${def}" min="${arg[0]}" max="${arg[1]}">`)}
-  else if(t==='text'){o.insertAdjacentHTML('beforeend',`<label>${label}</label><input type="text" data-k="${k}" value="${def}" placeholder="${arg}" maxlength="80">`)}
-  else if(t==='check'){o.insertAdjacentHTML('beforeend',`<div class="chk"><label><input type="checkbox" data-k="${k}" ${def==='1'?'checked':''}> ${label}</label></div>`)}}
- o.querySelectorAll('[data-k]').forEach(el=>el.addEventListener('input',()=>{S.o[el.dataset.k]=el.type==='checkbox'?(el.checked?'1':'0'):el.value;update()}))}
-function renderCopy(){const w=widget();document.getElementById('cf-name').textContent=w.name;document.getElementById('cf-copy').textContent=w.copy;
- document.getElementById('cf-good').innerHTML=w.good.map(g=>`<li>${g}</li>`).join('');document.getElementById('cf-data').textContent=w.data}
-function seg(id,attr,key){document.getElementById(id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
- [...b.parentNode.children].forEach(x=>x.setAttribute('aria-pressed',x===b));S[key]=b.dataset[attr];
- if(key==='size'){document.getElementById('custom').hidden=S.size!=='custom'}update()})}
-function choose(id,scroll){S.w=id;const sz=SIZES[id]||'400x340';S.size=sz;
- document.querySelectorAll('#sizes button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.s===sz));
- if(!document.querySelector('#sizes button[aria-pressed=true]')){S.size='custom';document.querySelector('#sizes button[data-s=custom]').setAttribute('aria-pressed',true);const[w,h]=sz.split('x');S.cw=w;S.ch=h;document.getElementById('cw').value=w;document.getElementById('ch').value=h}
- document.getElementById('custom').hidden=S.size!=='custom';
- renderCopy();renderOpts();update();if(scroll)document.getElementById('configure').scrollIntoView({behavior:'smooth'})}
-document.getElementById('grid').addEventListener('click',e=>{const c=e.target.closest('.card');if(!c)return;choose(c.dataset.w,true)});
-seg('sizes','s','size');seg('fs','f','fs');seg('themes','t','theme');seg('tabs','c','code');
-document.getElementById('cw').addEventListener('input',e=>{S.cw=e.target.value;update()});
-document.getElementById('ch').addEventListener('input',e=>{S.ch=e.target.value;update()});
-document.getElementById('accent').addEventListener('input',e=>{S.accent=e.target.value.slice(1);document.getElementById('accentx').value=S.accent;update()});
-document.getElementById('accentx').addEventListener('input',e=>{if(/^[0-9a-fA-F]{6}$/.test(e.target.value)){S.accent=e.target.value;document.getElementById('accent').value='#'+S.accent;update()}});
-function dims(){if(S.size==='custom')return[S.cw,S.ch];const[w,h]=S.size.split('x');return[w,h]}
-function url(){const p=new URLSearchParams();for(const[k,v]of Object.entries(S.o)){if(v!==''&&v!=null)p.set(k,v)}
- p.set('theme',S.theme);p.set('size',S.fs);if(S.accent.toUpperCase()!=='9A6B00')p.set('accent',S.accent);return `${CFG.base}/embed/${S.w}?${p}`}
-function badgeUrl(dark){const p=new URLSearchParams();if(S.o.tier)p.set('tier',S.o.tier);if(S.o.category)p.set('category',S.o.category);if(dark)p.set('theme','dark');if(S.accent.toUpperCase()!=='9A6B00')p.set('accent',S.accent);return `${CFG.base}/badge/index.svg?${p}`}
-function jsonUrl(){const m={index:`/v1/index?tier=${S.o.tier||'bluechip'}`,'top-sales':`/v1/leaderboard?limit=${S.o.count||5}`,movers:`/v1/index?tier=${S.o.tier||'all'}`,comps:`/v1/search?q=${encodeURIComponent(S.o.q||'')}`,'price-check':`/v1/search?q=${encodeURIComponent(S.o.q||'')}`};return CFG.base+m[S.w]}
-let t;function update(){clearTimeout(t);t=setTimeout(()=>{const[w,h]=dims();const u=url();const pv=document.getElementById('pv');
- pv.style.width=(w==='100%'?'100%':w+'px');pv.style.height=h+'px';if(pv.src!==u)pv.src=u;
- const wa=w==='100%'?'100%':w;const title=widget().name+' · RazMania';let code='';
- if(S.code==='iframe')code=`<iframe src="${u}" width="${wa}" height="${h}" title="${title}" style="border:0;border-radius:12px;max-width:100%" loading="lazy"></iframe>`;
- else if(S.code==='auto')code=`<iframe src="${u}&_id=rzm1" id="rzm1" width="${wa}" height="${h}" title="${title}" style="border:0;border-radius:12px;max-width:100%" loading="lazy"></iframe>\n<script>addEventListener('message',e=>{if(e.data&&e.data.type==='rzm-resize'&&e.data.id==='rzm1')document.getElementById('rzm1').style.height=e.data.height+'px'})<\/script>`;
- else if(S.code==='badge')code=`<!-- HTML -->\n<a href="https://razmania.com/index/"><img src="${badgeUrl(S.theme==='dark')}" alt="RazMania Index" width="260" height="64"></a>\n\n<!-- Markdown -->\n[![RazMania Index](${badgeUrl(S.theme==='dark')})](https://razmania.com/index/)`;
- else code=`# JSON, cached 30 min. Attribution required.\ncurl "${jsonUrl()}"`;
- document.getElementById('out').textContent=code;
- document.getElementById('badges').innerHTML=S.code==='badge'?`<img src="${badgeUrl(false)}" alt="" width="260" height="64"> <img src="${badgeUrl(true)}" alt="" width="260" height="64">`:''},150)}
-document.getElementById('cp').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(document.getElementById('out').textContent);document.getElementById('hint').textContent='Copied.'}catch(e){document.getElementById('hint').textContent='Select the code and copy it.'}setTimeout(()=>document.getElementById('hint').textContent='',1800)});
-addEventListener('message',e=>{if(e.data&&e.data.type==='rzm-resize'&&S.code==='auto'){document.getElementById('pv').style.height=e.data.height+'px'}});
-choose('index',false);
+// One independent configurator per section. Nothing is shared between them
+// except the data, so five widgets on one page cannot fight over state.
+document.querySelectorAll('.wsec').forEach(sec=>{
+ const id=sec.dataset.w, W=CFG.widgets.find(w=>w.id===id), $=s=>sec.querySelector(s), $$=s=>sec.querySelectorAll(s);
+ const S={size:$('.sizes button[aria-pressed=true]').dataset.s,cw:600,ch:W.h+40,fs:'m',theme:'light',accent:'9A6B00',code:'iframe',o:{}};
+ const o=$('.opts');
+ for(const [k,t,label,arg,def] of OPTS[id]){S.o[k]=def;
+  if(t==='select')o.insertAdjacentHTML('beforeend',`<label>${label}</label><select data-k="${k}">${arg.map(([v,l])=>`<option value="${v}" ${v===def?'selected':''}>${l}</option>`).join('')}</select>`);
+  else if(t==='number')o.insertAdjacentHTML('beforeend',`<label>${label}</label><input type="number" data-k="${k}" value="${def}" min="${arg[0]}" max="${arg[1]}">`);
+  else if(t==='text')o.insertAdjacentHTML('beforeend',`<label>${label}</label><input type="text" data-k="${k}" value="${def}" placeholder="${arg}" maxlength="80">`);
+  else o.insertAdjacentHTML('beforeend',`<div class="chk"><label><input type="checkbox" data-k="${k}" ${def==='1'?'checked':''}> ${label}</label></div>`)}
+ $$('.opts [data-k]').forEach(el=>el.addEventListener('input',()=>{S.o[el.dataset.k]=el.type==='checkbox'?(el.checked?'1':'0'):el.value;update()}));
+ const seg=(sel,attr,key)=>$(sel).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;[...b.parentNode.children].forEach(x=>x.setAttribute('aria-pressed',x===b));S[key]=b.dataset[attr];if(key==='size')$('.custom').hidden=S.size!=='custom';update()});
+ seg('.sizes','s','size');seg('.fs','f','fs');seg('.themes','t','theme');seg('.tabs','c','code');
+ $('.cw').addEventListener('input',e=>{S.cw=e.target.value;update()});$('.ch').addEventListener('input',e=>{S.ch=e.target.value;update()});
+ $('.accent').addEventListener('input',e=>{S.accent=e.target.value.slice(1);$('.accentx').value=S.accent;update()});
+ $('.accentx').addEventListener('input',e=>{if(/^[0-9a-fA-F]{6}$/.test(e.target.value)){S.accent=e.target.value;$('.accent').value='#'+S.accent;update()}});
+ const dims=()=>S.size==='custom'?[S.cw,S.ch]:S.size.split('x');
+ const url=()=>{const p=new URLSearchParams();for(const[k,v]of Object.entries(S.o)){if(v!==''&&v!=null)p.set(k,v)}p.set('theme',S.theme);p.set('size',S.fs);if(S.accent.toUpperCase()!=='9A6B00')p.set('accent',S.accent);return `${CFG.base}/embed/${id}?${p}`};
+ const badge=d=>{const p=new URLSearchParams();if(S.o.tier)p.set('tier',S.o.tier);if(S.o.category)p.set('category',S.o.category);if(d)p.set('theme','dark');if(S.accent.toUpperCase()!=='9A6B00')p.set('accent',S.accent);return `${CFG.base}/badge/index.svg?${p}`};
+ const json=()=>CFG.base+({index:`/v1/index?tier=${S.o.tier||'bluechip'}`,'top-sales':`/v1/leaderboard?limit=${S.o.count||5}`,movers:`/v1/index?tier=${S.o.tier||'all'}`,comps:`/v1/search?q=${encodeURIComponent(S.o.q||'')}`,'price-check':`/v1/search?q=${encodeURIComponent(S.o.q||'')}`})[id];
+ let t;function update(){clearTimeout(t);t=setTimeout(()=>{const[w,h]=dims();const u=url();const pv=$('.pv');const wa=w==='100%'?'100%':w;
+  pv.style.width=wa==='100%'?'100%':wa+'px';pv.style.height=h+'px';if(pv.src!==u)pv.src=u;const title=W.name+' · RazMania';let code='';
+  if(S.code==='iframe')code=`<iframe src="${u}" width="${wa}" height="${h}" title="${title}" style="border:0;border-radius:12px;max-width:100%" loading="lazy"></iframe>`;
+  else if(S.code==='auto')code=`<iframe src="${u}&_id=rzm-${id}" id="rzm-${id}" width="${wa}" height="${h}" title="${title}" style="border:0;border-radius:12px;max-width:100%" loading="lazy"></iframe>\n<script>addEventListener('message',e=>{if(e.data&&e.data.type==='rzm-resize'&&e.data.id==='rzm-${id}')document.getElementById('rzm-${id}').style.height=e.data.height+'px'})<\/script>`;
+  else if(S.code==='badge')code=`<!-- HTML -->\n<a href="https://razmania.com/index/"><img src="${badge(S.theme==='dark')}" alt="RazMania Index" width="260" height="64"></a>\n\n<!-- Markdown -->\n[![RazMania Index](${badge(S.theme==='dark')})](https://razmania.com/index/)`;
+  else code=`# JSON, cached 30 min. Attribution required.\ncurl "${json()}"`;
+  $('.out').textContent=code;$('.badges').innerHTML=S.code==='badge'?`<img src="${badge(false)}" alt="" width="260" height="64"> <img src="${badge(true)}" alt="" width="260" height="64">`:''},150)}
+ $('.cp').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('.out').textContent);$('.hint').textContent='Copied.'}catch(e){$('.hint').textContent='Select the code and copy it.'}setTimeout(()=>$('.hint').textContent='',1800)});
+ sec._S=S;update();
+});
 // When hosted inside razmania.com/widgets, report height so the host iframe fits.
 (function(){function h(){try{parent.postMessage({type:'rzm-store-resize',height:document.documentElement.scrollHeight},'*')}catch(e){}}
 addEventListener('load',h);addEventListener('resize',h);new MutationObserver(h).observe(document.body,{childList:true,subtree:true,attributes:true});setInterval(h,1500)})();
-</script></body></html>"""
+</script></body></html>
+"""
