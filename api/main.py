@@ -127,6 +127,97 @@ def leaderboard(
     return {"total": total, "limit": limit, "offset": offset, "results": rows}
 
 
+@app.get("/v1/index")
+def market_index(
+    tier: str = Query("all", pattern="^(all|bluechip)$"),
+    vertical: Optional[str] = None,
+    days: int = Query(180, ge=7, le=730),
+    include_unsettled: bool = False,
+):
+    """The RazMania Index — trailing-7-day price level, rebased to 100 at a
+    pinned base period. One row per (vertical, day), plus an 'All' composite.
+
+    UNSETTLED POINTS ARE WITHHELD BY DEFAULT, and that default is the whole
+    endpoint. etl/refresh_daily.sh scrapes $10,000+ daily but the $2,000-9,999
+    tail weekly, so the most recent ~9 days hold the hot tier only — 9% of
+    volume and the most expensive 9%. Those days read violently high until the
+    tail lands (measured at +38% on data calibrated to the real split), then
+    snap back. Serving them would publish a weekly sawtooth as though it were
+    the hobby. `include_unsettled=true` exists to debug the pipeline, not to
+    render the site.
+
+    TWO TIERS, and the difference between them is entirely a scrape-cadence
+    artefact rather than a difference of opinion about the market:
+
+      tier=bluechip   $10,000+ only, which is scraped DAILY, so it settles in
+                      2 days. ~9% of volume. The live, quotable number.
+      tier=all        everything at or above publish_floor. The $2,000-9,999
+                      tail is scraped every TAIL_EVERY days, so it settles more
+                      slowly (4 days at the shipped cadence of 3). The broad
+                      market read.
+
+    `settle_days` is returned per row and comes from schema_meta, which
+    etl/refresh_daily.sh rewrites from the scraper config on every run. It is
+    not a constant in this file and must not become one: if the cadence changed
+    and a hardcoded lag here did not, this endpoint would serve unsettled days
+    as settled — the exact failure the tier design exists to prevent.
+    """
+    p = {"days": days, "uns": include_unsettled, "vertical": vertical, "tier": tier}
+    where = ("tier = %(tier)s AND (%(uns)s OR settled)"
+             + (" AND vertical = %(vertical)s" if vertical else ""))
+
+    series = q(f"""
+        WITH anchor AS (
+            SELECT max(as_of) AS d FROM mv_market_index
+             WHERE tier = %(tier)s AND (%(uns)s OR settled)
+        )
+        SELECT tier, vertical, as_of, base_date, sales, gmv, median_price,
+               index_value, pct_change_7d, pct_change_30d, settle_days, settled
+          FROM mv_market_index, anchor
+         WHERE as_of > anchor.d - %(days)s::int AND {where}
+         ORDER BY vertical, as_of""", p)
+
+    # Newest point per vertical — what the index cards render from.
+    latest = q(f"""
+        SELECT DISTINCT ON (vertical)
+               tier, vertical, as_of, sales, gmv, median_price,
+               index_value, pct_change_7d, pct_change_30d, settle_days, settled
+          FROM mv_market_index
+         WHERE {where}
+         ORDER BY vertical, as_of DESC""", p)
+    # Composite first, then biggest market down.
+    latest.sort(key=lambda r: (r["vertical"] != "All", -(r["gmv"] or 0)))
+
+    meta = q("""SELECT (SELECT min(base_date) FROM mv_market_index WHERE tier = %(tier)s)
+                           AS base_date,
+                       (SELECT max(as_of) FILTER (WHERE settled)
+                          FROM mv_market_index WHERE tier = %(tier)s)
+                           AS settled_through,
+                       (SELECT max(as_of) FROM mv_market_index WHERE tier = %(tier)s)
+                           AS computed_through,
+                       (SELECT max(settle_days) FROM mv_market_index WHERE tier = %(tier)s)
+                           AS settle_days,
+                       (SELECT max(sold_date) FROM sales WHERE is_publishable)
+                           AS last_sale_date""", p)[0]
+
+    return {
+        "tier": tier,
+        **meta,
+        # The floor is a fact about the data, not a caption choice. Ship it in
+        # the payload so no consumer can render the index without it.
+        "publish_floor": float(q("SELECT v::numeric AS v FROM schema_meta "
+                                 "WHERE k = 'publish_floor'")[0]["v"]),
+        "floor": float(q("SELECT v::numeric AS v FROM schema_meta WHERE k = 'hot_floor'")[0]["v"])
+                 if tier == "bluechip" else
+                 float(q("SELECT v::numeric AS v FROM schema_meta "
+                         "WHERE k = 'publish_floor'")[0]["v"]),
+        "basis": "Trailing 7-day median of confirmed sales, rebased to 100. "
+                 "Best-offer-accepted listings excluded.",
+        "latest": latest,
+        "series": series,
+    }
+
+
 @app.get("/v1/daily")
 def daily(vertical: Optional[str] = None, days: int = Query(90, ge=1, le=730)):
     """Daily series for sparklines and trend charts."""

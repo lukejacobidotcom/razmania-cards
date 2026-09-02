@@ -109,6 +109,22 @@ The first run costs more than a normal day (6-day catch-up window, ~4,400 rows
 **Check back in a week.** `/v1/health` should show `days_stale` of 0 or 1 and a
 `last_successful_refresh` from that morning.
 
+## Step 4b — The index (5 min)
+
+Nothing to apply by hand. Push, wait for the cron job's deploy to finish, then
+**Trigger Run**. The run logs should open with
+`==> 0/4 schema changed (... -> ...): applying db/schema.sql`, then
+`==> config: hot_floor=10000 settle_all=4d settle_bluechip=2d`. After it
+finishes, `/v1/index?tier=bluechip` and `/v1/index` return series. Both need
+about two weeks of `sold_date` coverage to publish a first settled point; the
+live warehouse already has more than that.
+
+Then upload `wordpress/razmania-index/` as a **second** plugin (do not touch
+the live `razmania-cards`), activate it, and put `[razmania_index_page]` on an
+empty full-width page at `/index/`. Set that URL in **Settings → RazMania
+Index** so the citation block prints it. `[razmania_index_hero]` and
+`[razmania_ticker]` go on the homepage.
+
 ## Step 5 — WordPress (10 min)
 
 1. Upload `wordpress/razmania-cards/` to `wp-content/plugins/` (or zip that

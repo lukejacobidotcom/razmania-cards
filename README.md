@@ -32,6 +32,7 @@ request must never trigger an aggregation.
 | 7-day leaderboard + rank | **Postgres** (`mv_leaderboard_7d`) | Window functions over the full set. |
 | Per-card comps with the n≥3 rule | **Postgres** (`mv_card_comps`) | The rule is enforced in SQL so no client can bypass it. |
 | Player rollups + slugs | **Postgres** (`mv_player_summary`) | URL slugs generated once, not per request. |
+| The index: trailing-7d median rebased to 100, per vertical + composite | **Postgres** (`mv_market_index`, `index_base`) | Needs a 7-day window at every date, a pinned base and a settled cutoff. None of that can be redone per request. |
 | Excluding best-offer rows **and rows below the publish floor** | **Postgres** (`is_publishable` generated column) | Defined in exactly one place so API, views and site can never disagree. |
 | Sorting/filtering a fetched page, tab switching, search-as-you-type over loaded rows | **Front end** | Zero-latency, no network. |
 | Currency/date formatting, sparkline drawing, responsive tables | **Front end** | Presentation. |
@@ -44,6 +45,89 @@ seller's **asking price, not what was paid**. Every view filters on this column,
 so neither a best-offer price nor a partially-collected price range can reach
 the site by accident.
 
+## The RazMania Index
+
+A trailing-7-day median of confirmed sales, rebased to 100, per vertical plus a
+fixed-weight composite. `mv_market_index` + `index_base` + `v_index_windows`,
+served at `/v1/index`, rendered by `[razmania_index]`.
+
+### Two tiers, because the cadence is the lag
+
+An index cannot settle a day until every tier has swept it, so how often you
+scrape *is* how far behind you publish. That gives two honest products off one
+piece of machinery:
+
+| Tier | Range | Scraped | Settles in | What it is |
+|---|---|---|---|---|
+| `bluechip` | `$10,000+` | daily | **2 days** | The live, quotable number. ~9% of volume. |
+| `all` | `$2,000+` | every 3 days | **4 days** | The broad market read. |
+
+`bluechip` is free — that tier was already scraped daily for the leaderboard. It
+is also the narrower index: at ~68 sales/day it will support the composite and a
+handful of big categories, not the full list. That is the honest outcome of the
+n≥20 rule below, not something to tune away.
+
+**The lag is config-driven, not hardcoded.** `refresh_daily.sh` writes
+`hot_floor` and the two settle values into `schema_meta` on every run, derived
+from `HOT_FLOOR` and `TAIL_EVERY`. Change the cadence and the published lag
+follows by itself. A literal offset in SQL would silently publish unsettled days
+the first time the cadence moved — which is the exact failure the design exists
+to prevent, so there isn't one anywhere in the file.
+
+### The four rules that keep it honest
+
+**1. Recent days are withheld.** A tier's newest days are incomplete until its
+next scrape lands. For `all`, those days hold the hot tier only — the most
+expensive 9% — so they read high, then "correct". Published as a chart, that is
+a sawtooth showing the hobby doubling and crashing, manufactured entirely by the
+scrape schedule. Measured on synthetic data calibrated to the real split, the
+withheld distortion is **+9%** at the current 3-day cadence and was **+100%**
+under the old weekly one. Every row carries `settled`; the API serves nothing
+else unless you ask. `/v1/leaderboard` stays live, because only `$10,000+` sales
+reach it. **A page showing both must say which is which.**
+
+**2. The base is pinned, not recomputed.** `index_base` stores each
+`(tier, vertical)`'s base date, base median and composite weight, written once by
+`pin_index_base()` and never again. Without this, `db/retention.sql` pruning past
+400 days would eventually delete the base window and silently rebase every
+historical value — an index whose history changes underneath it is not an index.
+The table is append-only: **updating or deleting a row rewrites published
+history.**
+
+**3. Thin verticals get a gap, not a line.** A window needs n≥20, defined once in
+`v_index_windows` and read by both the pin function and the view. Card prices are
+roughly lognormal with σ≈0.78, so the standard error of a weekly median is ±44%
+at n=5 and ±22% at n=20 — at n=5 a category prints +41% then −49% while nothing
+happened. `Unknown` (~17% of rows) is excluded outright: it tracks
+`etl/classify.py`, not the hobby.
+
+**4. The composite is fixed-weight,** because a pooled median moves when the
+*mix* moves. Doubling one vertical's volume without touching a price shifts a
+pooled median by ~9% and the composite by **0.00**.
+
+### Two ways to break it
+
+**Moving a price floor invalidates that tier's base.** This matters, because this
+README plans `MIN_PRICE=500` for player pages. The pinned base medians were
+measured over `$2,000+` sales; the day the floor drops, every window starts
+including `$500–1,999` sales and the median falls off a cliff — the index prints
+a catastrophic crash caused entirely by a config change. A floor move means
+**deliberately relaunching**: delete that tier from `index_base`, let
+`pin_index_base()` re-pin, and say publicly that the series was rebased. Changing
+`HOT_FLOOR` does the same to `bluechip`.
+
+**Changing the cadence without the window.** `refresh_daily.sh` derives the
+window floor from `TAIL_EVERY`. The old code fixed it at 8 days; running that on
+a 3-day cadence would cost ~$136/mo — worse than daily, for a worse lag.
+
+### What it needs before it says anything
+
+**13 days of `sold_date` coverage** for `bluechip` (7 for the first window, 2 to
+settle, plus the n≥20 warm-up) and **11+ for `all`** — call it two weeks either
+way, and ~6 weeks before the chart reads as a trend. The shipped seed is only a
+7-day snapshot, so the curve comes from live refreshes. Since eBay exposes only
+~90 days of sold data, history not collected now cannot be bought later.
+
 ## Cost
 
 | Service | Plan | Cost |
@@ -51,8 +135,8 @@ the site by accident.
 | Render Postgres | `basic-256mb` + 5 GB storage | **$7.50/mo** |
 | Render Web Service (API) | `starter` | **$7/mo** |
 | Render Cron (daily) | `starter`, ~15 min/day | **~$0.75/mo** |
-| Apify scrape | `MIN_PRICE=2000`, tiered cadence | **~$68/mo** |
-| **Total** | | **~$83/mo** |
+| Apify scrape | `MIN_PRICE=2000`, tiered cadence | **~$78/mo** |
+| **Total** | | **~$93/mo** |
 
 ### Apify is the real cost — and it scales with rows, not runs
 
@@ -80,15 +164,42 @@ materially between Tuesday and Wednesday.
 | Slice | Cadence | Window | Rows/mo | Cost |
 |---|---|---|---|---|
 | `$10,000+` (`HOT_FLOOR`) | **daily** | 2 days | 4,080 | **$10/mo** |
-| `$2,000–9,999` | **weekly** (`TAIL_DOW`) | 8 days | 23,278 | **$58/mo** |
-| | | | | **$68/mo** |
+| `$2,000–9,999` | **every 3 days** (`TAIL_EVERY`) | 4 days | 27,197 | **$68/mo** |
+| | | | | **$78/mo** |
 
-Flat daily-everything was **$111/mo**. Same rows collected, redundancy drops
-from **2.0x to 1.2x** — the saving is entirely from not re-buying yesterday's
-cheap rows, not from dropping data. **$43/mo, $525/yr.**
+Flat daily-everything is **$112/mo**. The saving is entirely from not re-buying
+yesterday's cheap rows, not from dropping data.
 
-Set `TAIL_DOW` above 6 to switch the tail off entirely: **~$10/mo**, leaderboard
-unchanged, no medians.
+Set `TAIL_EVERY=0` to switch the tail off entirely: **~$10/mo**, leaderboard
+unchanged, no medians, and the broad index publishes nothing.
+
+#### Why every 3 days and not weekly
+
+Cost is set by **redundancy**, not volume. A cadence of `k` days needs a `k+1`
+day window, so the redundancy factor is `1 + 1/k` — which barely moves until `k`
+gets small:
+
+| `TAIL_EVERY` | Window | Redundancy | Tail cost | Total platform | Index lag |
+|---|---|---|---|---|---|
+| 7 | 8 days | 1.14× | $58/mo | $83/mo | **9 days** |
+| **3 (current)** | 4 days | 1.33× | $68/mo | **$93/mo** | **4 days** |
+| 2 | 3 days | 1.50× | $77/mo | $102/mo | 3 days |
+| 1 | 2 days | 2.00× | $102/mo | $127/mo | 2 days |
+
+**Weekly was the right answer on cost alone, and the wrong one once the index
+existed.** The index cannot settle a day until this tier has swept it, so the
+cadence *is* the lag. Going from weekly to every 3 days costs **$10/mo** and cuts
+the lag from 9 days to 4. Measured on synthetic data calibrated to the real
+9/91 split, it also shrinks the withheld distortion from **+100% to +9%** — an
+11× reduction in how wrong the recent, unpublished days are.
+
+Going all the way to daily costs **$34/mo more** for two further days, because at
+`k=1` every row is bought twice purely as overlap insurance. Not worth it.
+
+**Never change the cadence without the window.** The window floor is derived from
+`TAIL_EVERY` in `refresh_daily.sh`. The old code floored it at 8 days regardless;
+running that every 3 days would cost **~$136/mo** — worse than daily, for a worse
+lag.
 
 #### Floor economics, if you ever move it
 
@@ -128,6 +239,14 @@ which would show visitors a loading page.
    ```bash
    psql "$DATABASE_URL" -f db/schema.sql
    ```
+   **After the first apply you never run this by hand again.**
+   `etl/refresh_daily.sh` records the file's md5 in `schema_meta.schema_hash`
+   and re-applies `db/schema.sql` on the next run whenever the hash changes —
+   so a schema change ships by `git push` and lands at 05:00 ET, or immediately
+   via **Trigger Run** on the cron job. The apply is idempotent: it rebuilds
+   every materialized view (a few seconds of 500s on `/v1` at 05:00), and
+   `index_base` is `CREATE TABLE IF NOT EXISTS`, so it **preserves the pinned
+   index base** rather than rebasing published history.
 5. Backfill the 21,766-row seed that ships with this repo. It is $500+ data,
    which is deliberate — it is already paid for, it feeds `/v1/search`, and it
    is there if you ever drop the floor. The publish floor keeps it out of every
@@ -140,6 +259,24 @@ which would show visitors a loading page.
    then **Settings → RazMania Cards** and paste the API base URL and key.
 
 ## WordPress usage
+
+**The index ships as its own plugin, `wordpress/razmania-index/`.** The copy of
+`razmania-cards` running on razmania.com has grown a design system, email
+capture and theme integration that are not in this repository, so the index is
+not a patch to that file — it is a second plugin that reuses the first one's API
+settings and its CSS tokens (`--ink`, `--bg`, `--gold`, `--up`, `--down`) and
+depends on nothing else.
+
+```
+[razmania_index_page]            the landing page: masthead, both tiers, tape, charts, methodology, citation
+[razmania_index]                 broad index ($2,000+)
+[razmania_index tier="bluechip"] blue-chip index ($10,000+)
+[razmania_index_hero]            the two headline numbers — homepage
+[razmania_ticker]                the live tape — homepage
+[razmania_index_methodology]     the academic section alone
+```
+
+`razmania-cards` (this repo's copy is behind production, but its shortcodes are unchanged):
 
 ```
 [razmania_stats]
@@ -168,6 +305,7 @@ seeing the API key.
 | `GET /v1/stats` | Site-wide header numbers. |
 | `GET /v1/verticals` | Per-vertical, this week vs last week. |
 | `GET /v1/leaderboard?vertical=&limit=&offset=` | Biggest confirmed sales, 7 days. |
+| `GET /v1/index?tier=&vertical=&days=&include_unsettled=` | The RazMania Index. `tier=all` (default, 4-day lag) or `tier=bluechip` (2-day lag). Settled points only unless you opt in. |
 | `GET /v1/daily?vertical=&days=` | Daily series for charts. |
 | `GET /v1/players?q=&limit=` | Player index. |
 | `GET /v1/players/{slug}` | Player page: summary + comps + recent sales, one call. |
@@ -189,8 +327,9 @@ homepage is current before US morning traffic:
    `+2` is load-bearing, because eBay sales land around the clock and at 09:00 UTC
    a sale dated *today* has usually already landed — a 1-day window would
    permanently miss everything completing after each run. Tail gets `behind + 1`,
-   floored at 8 and capped at 9, and fires on `TAIL_DOW` **or** any day it has
-   drifted past 8 days stale, so a missed week self-heals.
+   floored at `TAIL_EVERY + 1` and capped at `TAIL_EVERY + 2`, and fires whenever
+   it has drifted `TAIL_EVERY` days stale — so a missed run self-heals and the
+   window can never be wider than the cadence needs.
 2. `etl/scrape.py` — Apify. 2 bands on a hot day, 6 more on tail day, disjoint by
    construction. Retries 402/429/5xx with backoff and staggers starts, because a
    burst of simultaneous run-starts is enough to make Apify reject the lot.
@@ -236,3 +375,8 @@ so deleted history cannot be re-scraped.
 - `mv_card_comps` is thin at this floor (17 cards clear n≥3). Player value pages
   need `MIN_PRICE=500`. Homepage modules do not.
 - Week-over-week columns stay `NULL` until two full weeks are loaded.
+- **The index needs ~2 weeks of `sold_date` coverage** before a settled point
+  exists, and ~6 weeks before the chart reads as a trend. At the $2,000 floor the
+  thin verticals (Motorsport, WWE, Hockey) will not clear n≥20 and are correctly
+  absent; `MIN_PRICE=500` brings them in with real sample sizes. The `bluechip`
+  tier is narrower still — expect the composite plus a few big categories.

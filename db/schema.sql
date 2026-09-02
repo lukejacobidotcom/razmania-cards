@@ -249,7 +249,269 @@ SELECT
     (SELECT min(sold_date) FROM sales)                        AS first_date,
     (SELECT max(sold_date) FROM sales)                        AS last_date,
     (SELECT count(DISTINCT player) FROM sales WHERE player IS NOT NULL) AS players_tracked,
+    -- Share of listings at/above the floor that are best-offer-accepted, i.e.
+    -- the share whose published "sold" price is really the asking price. This
+    -- is the number the index methodology cites, so it lives here, refreshed
+    -- once a day, rather than being scanned per page view.
+    (SELECT round(avg(best_offer_accepted::int)::numeric, 4) FROM sales
+      WHERE total_price >= (SELECT v::numeric FROM schema_meta
+                             WHERE k = 'publish_floor'))       AS best_offer_share,
     now()                                                     AS generated_at;
+
+
+-- ============================================================================
+-- 7. THE RAZMANIA INDEX — trailing-7-day price level, rebased to 100.
+--
+-- Published in TWO TIERS off the same machinery, because the scrape cadence
+-- that makes one of them cheap is what makes the other one slow:
+--
+--   'bluechip'  $10,000+ only. That tier is scraped DAILY, so it settles in
+--               2 days. ~9% of volume. This is the live, quotable number.
+--   'all'       everything at or above publish_floor. The $2,000-9,999 tail is
+--               scraped every TAIL_EVERY days, so it settles more slowly. This
+--               is the broad market read.
+--
+-- Four things would each, on their own, turn this into a chart that lies. All
+-- four are handled here rather than in the API or the front end, for the same
+-- reason is_publishable lives in the table: one definition, no way to bypass it.
+--
+-- (a) SCRAPE CADENCE moves the recent days, not the market.
+--     A tier's most recent days are incomplete until its next scrape lands. For
+--     'all' those days hold the hot tier only — the most expensive 9% — and the
+--     composite reads +38% high (+118% before the n>=20 floor below removes the
+--     thinnest windows), then "corrects" when the tail arrives. Published as a
+--     chart that is a weekly sawtooth showing the hobby doubling and crashing.
+--     Pure artefact. Every row carries `settled`, and the API serves only
+--     settled points unless explicitly asked otherwise.
+--
+--     THE LAG IS CONFIG-DRIVEN, NOT HARDCODED. It comes from schema_meta, which
+--     etl/refresh_daily.sh rewrites from HOT_FLOOR and TAIL_EVERY on every run.
+--     Change the cadence and the lag follows by itself. A hardcoded offset here
+--     would silently publish unsettled days the first time the cadence moved,
+--     which is precisely the failure this whole section exists to prevent.
+--
+-- (b) MIX SHIFT is not price movement. A quiet week in Basketball and a loud
+--     one in Pokemon moves a pooled median without one card changing hands at
+--     a different price. So each composite is a fixed-weight index: verticals
+--     are rebased to 100 at their own base window, and 'All' weights them by
+--     base-period GMV share.
+--
+-- (c) THE BASE MUST NOT DRIFT. If base levels were recomputed from `sales` on
+--     every refresh, db/retention.sql pruning past 400 days would eventually
+--     delete the base window and silently rebase every historical value. An
+--     index whose history changes underneath it is not an index. Base date,
+--     base median and weights are PINNED ONCE per (tier, vertical).
+--
+-- (d) 'Unknown' is excluded outright. It is ~17% of rows and it is a residue
+--     bucket, not a market — its median tracks etl/classify.py, not the hobby.
+--
+-- MIN WINDOW SIZE. A window needs >= 20 confirmed sales to produce a point.
+-- Card prices are roughly lognormal with sigma ~= 0.78 (measured on
+-- seed/sales_all.csv.gz), and the standard error of a median is about
+-- 1.253 * sigma / sqrt(n) in log terms:
+--
+--     n=5  -> +/-44%   a weekly median indistinguishable from noise
+--     n=20 -> +/-22%
+--     n=50 -> +/-14%
+--
+-- At n=5 a thin vertical prints +41% one week and -49% the next while nothing
+-- actually happened. So thin verticals show a GAP instead of a line. This bites
+-- hardest on 'bluechip', which is only ~68 sales/day in total: expect a handful
+-- of constituents there, not the full category list. That is the honest
+-- outcome, not a bug to tune away.
+--
+-- The threshold is defined ONCE, in v_index_windows, which both pin_index_base()
+-- and mv_market_index read. It used to be written twice; if the two ever
+-- disagreed, a vertical could be pinned on a window the view then refused to
+-- produce, and it would have a base but never a series.
+-- ============================================================================
+
+-- 7a. Config the index reads. etl/refresh_daily.sh rewrites these every run so
+-- the scraper's cadence and the index's lag can never disagree. Seeded here
+-- with the shipped defaults so a fresh database is valid before the first run.
+INSERT INTO schema_meta (k, v) VALUES
+    ('hot_floor',                   '10000'),
+    ('index_settle_days_all',       '4'),
+    ('index_settle_days_bluechip',  '2')
+ON CONFLICT (k) DO NOTHING;
+
+-- 7b. The pinned base period. Written once per (tier, vertical), then never
+-- again.
+CREATE TABLE IF NOT EXISTS index_base (
+    tier        TEXT        NOT NULL,
+    vertical    TEXT        NOT NULL,
+    base_date   DATE        NOT NULL,
+    base_median NUMERIC     NOT NULL,
+    -- NULL = has its own index line but is NOT a composite constituent. The
+    -- constituent set is frozen at launch: a vertical qualifying later would
+    -- enter at 100 while the others sit at 130, and the renormalised mean would
+    -- step down on a day when no price moved.
+    weight      NUMERIC,
+    pinned_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tier, vertical)
+);
+
+-- Migrate a pre-tier index_base in place. Dropping and rebuilding it would
+-- rebase published history, which is the one thing this table exists to stop.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'index_base' AND column_name = 'tier') THEN
+        RAISE NOTICE 'migrating index_base to tiered layout, preserving pinned base';
+        ALTER TABLE index_base ADD COLUMN tier TEXT NOT NULL DEFAULT 'all';
+        ALTER TABLE index_base DROP CONSTRAINT index_base_pkey;
+        ALTER TABLE index_base ADD PRIMARY KEY (tier, vertical);
+        ALTER TABLE index_base ALTER COLUMN tier DROP DEFAULT;
+    END IF;
+END $$;
+
+COMMENT ON TABLE index_base IS
+  'Pinned base period for mv_market_index, per (tier, vertical). Append-only by '
+  'design: rows are inserted once by pin_index_base() and must never be updated '
+  'or deleted, or every historical index value silently changes. To relaunch a '
+  'tier with a new base, DELETE that tier deliberately and say so publicly. '
+  'NOTE: changing publish_floor or hot_floor INVALIDATES the affected base '
+  'medians -- they were measured over a different price range, so the index '
+  'would print a crash caused purely by the config change. A floor move '
+  'requires a deliberate relaunch, not a silent re-pin.';
+
+-- 7c. The trailing windows, per tier. ONE definition, read by both the pin
+-- function and the materialized view.
+DROP MATERIALIZED VIEW IF EXISTS mv_market_index CASCADE;
+DROP VIEW IF EXISTS v_index_windows CASCADE;
+CREATE VIEW v_index_windows AS
+WITH cfg AS (
+    SELECT (SELECT v::numeric FROM schema_meta WHERE k = 'hot_floor') AS hot_floor
+),
+tiers AS (
+    -- 'all' needs no floor of its own: is_publishable already enforces
+    -- publish_floor, and duplicating it here would be a second place to get
+    -- the floor wrong.
+    SELECT 'all'::text AS tier, 0::numeric AS min_price
+    UNION ALL
+    SELECT 'bluechip', (SELECT hot_floor FROM cfg)
+),
+bounds AS (
+    SELECT min(sold_date) AS first_date, max(sold_date) AS last_date
+      FROM sales WHERE is_publishable
+),
+cal AS (
+    SELECT d::date AS as_of
+      FROM bounds b,
+           generate_series(b.first_date + 6, b.last_date, INTERVAL '1 day') d
+)
+SELECT t.tier,
+       c.as_of,
+       s.vertical,
+       count(*)           AS sales,
+       sum(s.total_price) AS gmv,
+       -- ::numeric is load-bearing, not decorative. percentile_cont returns
+       -- DOUBLE PRECISION, and round(double precision, integer) does not exist
+       -- in Postgres — every round() downstream would fail at apply time.
+       -- mv_vertical_wow casts for exactly the same reason.
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY s.total_price)::numeric
+                          AS median_price
+  FROM tiers t
+  CROSS JOIN cal c
+  JOIN sales s
+    ON s.is_publishable
+   AND s.vertical <> 'Unknown'
+   AND s.total_price >= t.min_price
+   AND s.sold_date <= c.as_of
+   AND s.sold_date >  c.as_of - 7
+ GROUP BY t.tier, c.as_of, s.vertical
+HAVING count(*) >= 20;      -- THE min-window rule. Defined here and nowhere else.
+
+-- 7d. Pin the base. Idempotent: ON CONFLICT DO NOTHING is what makes the base
+-- permanent — every refresh calls this, and every call after the first is a
+-- no-op for a (tier, vertical) already pinned.
+CREATE OR REPLACE FUNCTION pin_index_base() RETURNS void AS $$
+BEGIN
+    WITH firsts AS (
+        SELECT DISTINCT ON (tier, vertical) tier, vertical, as_of, median_price, gmv
+          FROM v_index_windows ORDER BY tier, vertical, as_of
+    ),
+    -- Weights go only to verticals qualifying on the FIRST day any vertical in
+    -- that tier does, so each composite starts at exactly 100.00.
+    launch AS (SELECT tier, min(as_of) AS d FROM firsts GROUP BY tier),
+    already AS (SELECT DISTINCT tier FROM index_base)
+    INSERT INTO index_base (tier, vertical, base_date, base_median, weight)
+    SELECT f.tier, f.vertical, f.as_of, f.median_price,
+           CASE WHEN f.as_of = l.d AND f.tier NOT IN (SELECT tier FROM already)
+                THEN f.gmv / sum(f.gmv) FILTER (WHERE f.as_of = l.d)
+                                        OVER (PARTITION BY f.tier)
+           END
+      FROM firsts f JOIN launch l USING (tier)
+    ON CONFLICT (tier, vertical) DO NOTHING;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 7e. The index itself.
+CREATE MATERIALIZED VIEW mv_market_index AS
+WITH bounds AS (
+    SELECT max(sold_date) AS last_date FROM sales WHERE is_publishable
+),
+settle AS (
+    SELECT 'all'::text AS tier,
+           (SELECT v::int FROM schema_meta WHERE k = 'index_settle_days_all') AS days
+    UNION ALL
+    SELECT 'bluechip',
+           (SELECT v::int FROM schema_meta WHERE k = 'index_settle_days_bluechip')
+),
+vert AS (
+    SELECT w.tier, w.as_of, w.vertical, w.sales, w.gmv, w.median_price,
+           b.base_date,
+           100 * w.median_price / b.base_median AS index_value
+      FROM v_index_windows w
+      JOIN index_base b USING (tier, vertical)
+     WHERE w.as_of >= b.base_date
+),
+-- Renormalised over whichever constituents produced a point that day, so one
+-- vertical dipping below the n>=20 floor rescales the composite instead of
+-- silently dropping its weight and stepping the line.
+composite AS (
+    SELECT v.tier,
+           v.as_of,
+           'All'::text   AS vertical,
+           sum(v.sales)  AS sales,
+           sum(v.gmv)    AS gmv,
+           NULL::numeric AS median_price,
+           min(v.base_date) AS base_date,
+           sum(v.index_value * b.weight) / sum(b.weight) AS index_value
+      FROM vert v
+      JOIN index_base b
+        ON b.tier = v.tier AND b.vertical = v.vertical AND b.weight IS NOT NULL
+     GROUP BY v.tier, v.as_of
+),
+allrows AS (
+    SELECT * FROM vert
+    UNION ALL
+    SELECT * FROM composite
+)
+SELECT
+    a.tier,
+    a.vertical,
+    a.as_of,
+    a.base_date,
+    a.sales,
+    a.gmv,
+    round(a.median_price, 2) AS median_price,
+    round(a.index_value, 2)  AS index_value,
+    -- Joined on date, never lag(). A thin vertical can have gaps, and lag(7)
+    -- would then quietly compare against whatever row sat 7 ROWS back.
+    round(100 * (a.index_value / NULLIF(p7.index_value, 0)  - 1), 1) AS pct_change_7d,
+    round(100 * (a.index_value / NULLIF(p30.index_value, 0) - 1), 1) AS pct_change_30d,
+    s.days                       AS settle_days,
+    (a.as_of <= b.last_date - s.days) AS settled
+FROM allrows a
+CROSS JOIN bounds b
+JOIN settle s ON s.tier = a.tier
+LEFT JOIN allrows p7  ON p7.tier  = a.tier AND p7.vertical  = a.vertical
+                     AND p7.as_of  = a.as_of - 7
+LEFT JOIN allrows p30 ON p30.tier = a.tier AND p30.vertical = a.vertical
+                     AND p30.as_of = a.as_of - 30;
+CREATE UNIQUE INDEX mv_market_index_pk ON mv_market_index (tier, vertical, as_of);
+CREATE INDEX mv_market_index_asof ON mv_market_index (tier, as_of DESC);
 
 -- ---------------------------------------------------------------- refresh
 -- CONCURRENTLY keeps the site readable during a refresh; it requires the unique
@@ -261,6 +523,10 @@ BEGIN
     REFRESH MATERIALIZED VIEW CONCURRENTLY mv_card_comps;
     REFRESH MATERIALIZED VIEW CONCURRENTLY mv_player_summary;
     REFRESH MATERIALIZED VIEW CONCURRENTLY mv_vertical_wow;
+    -- Pins the base period on the first refresh that has data; a no-op
+    -- on every refresh after that. Must run BEFORE the index refresh.
+    PERFORM pin_index_base();
+    REFRESH MATERIALIZED VIEW CONCURRENTLY mv_market_index;
     REFRESH MATERIALIZED VIEW mv_site_stats;
 END;
 $$ LANGUAGE plpgsql;
