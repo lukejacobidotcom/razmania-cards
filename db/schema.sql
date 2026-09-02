@@ -456,6 +456,18 @@ BEGIN
       FROM v_index_windows w
      WHERE b.base_hot_share IS NULL
        AND w.tier = b.tier AND w.vertical = b.vertical AND w.as_of = b.base_date;
+    -- The TIER-WIDE base hot share, pinned once. This is what the composition
+    -- guard compares against. Per-vertical shares are kept above for
+    -- diagnostics but are far too noisy to gate on: a category with one hot
+    -- sale in its base window flips on the next one.
+    INSERT INTO schema_meta (k, v)
+    SELECT 'index_base_hot_share_' || w.tier,
+           (sum(w.hot_sales)::numeric / sum(w.sales))::text
+      FROM v_index_windows w
+      JOIN (SELECT tier, min(base_date) AS d FROM index_base GROUP BY tier) l
+        ON l.tier = w.tier AND l.d = w.as_of
+     GROUP BY w.tier
+    ON CONFLICT (k) DO NOTHING;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -477,19 +489,40 @@ settle AS (
 -- weeks and every broad window became ~30% hot-tier instead of ~9%. Those
 -- windows were "settled" by the calendar and wildly wrong in fact — the broad
 -- composite read 188 with a -45% week. So a window is also required to LOOK
--- like the base period: its $hot_floor+ share may be at most 2.5x the base
--- share. Under-collection of the cheap tier fails this directly, whatever the
--- cadence config says. 'bluechip' windows are 100% hot by construction, so the
--- guard is a no-op there — which is why it stayed correct through the outage.
+-- like the base period: the tier's $hot_floor+ share on that day may be at
+-- most 2.5x the tier's base share. Under-collection of the cheap tier fails
+-- this directly, whatever the cadence config says.
+--
+-- It is evaluated TIER-WIDE, once per day, and applied to every row of that
+-- tier. The first version gated each category on its own base share and
+-- flagged 30 of 31 real production days, including days the tail was full,
+-- because small categories have base shares near zero and flip on a single
+-- extra hot sale. Under-collection hits every category at once, so the
+-- tier-wide share is both the right signal and a far less noisy one.
+-- 'bluechip' windows are 100% hot by construction, so the guard is a no-op
+-- there — which is why it stayed correct through the outage.
+tierday AS (
+    SELECT w.tier, w.as_of,
+           sum(w.hot_sales)::numeric / sum(w.sales) AS hot_share
+      FROM v_index_windows w
+     GROUP BY w.tier, w.as_of
+),
+guard AS (
+    SELECT t.tier, t.as_of,
+           (t.tier = 'bluechip'
+            OR m.v IS NULL
+            OR t.hot_share <= 2.5 * m.v::numeric) AS complete
+      FROM tierday t
+      LEFT JOIN schema_meta m ON m.k = 'index_base_hot_share_' || t.tier
+),
 vert AS (
     SELECT w.tier, w.as_of, w.vertical, w.sales, w.gmv, w.median_price,
            b.base_date,
            100 * w.median_price / b.base_median AS index_value,
-           (w.tier = 'bluechip'
-            OR b.base_hot_share IS NULL
-            OR w.hot_sales::numeric / w.sales <= 2.5 * b.base_hot_share) AS complete
+           g.complete
       FROM v_index_windows w
       JOIN index_base b USING (tier, vertical)
+      JOIN guard g ON g.tier = w.tier AND g.as_of = w.as_of
      WHERE w.as_of >= b.base_date
 ),
 -- Renormalised over whichever constituents produced a point that day, so one
