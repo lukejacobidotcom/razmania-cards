@@ -95,6 +95,25 @@ def floor() -> float:
     return float(q(f"SELECT {FLOOR_SQL} AS v")[0]["v"])
 
 
+def suspended(tier: str):
+    """A tier is SUSPENDED when its newest settled point sits more than a week
+    past its own lag - the composition guard is withholding windows because the
+    cheap tier is being under-collected. An embed on someone else's site must
+    say so rather than show a two-week-old number as today's. Returns the
+    settled-through date when suspended, else None."""
+    r = q("""SELECT max(as_of) FILTER (WHERE settled) AS s, max(as_of) AS c, max(settle_days) AS d
+               FROM mv_market_index WHERE tier = %s""", (tier,))[0]
+    if r["s"] and r["c"] and (r["c"] - r["s"]).days > int(r["d"] or 0) + 7:
+        return r["s"]
+    return None
+
+
+def suspended_note(since) -> str:
+    return (f'<p class="empty"><b>Publication suspended</b> since {esc(nice_date(since))}: recent days fail '
+            f'the composition check (the $2,000-9,999 range is being under-collected), so the index '
+            f'withholds them rather than print an artefact. It resumes on its own when collection is complete.</p>')
+
+
 # ------------------------------------------------------------------ shell
 
 CSS = """
@@ -181,6 +200,12 @@ def embed_index(tier: str = TIER, category: str = CATEGORY, days: int = Query(90
                  ("hot_floor" if tier == "bluechip" else "publish_floor",))[0]["v"])
     name = "Blue Chip Index" if tier == "bluechip" else "Index"
     label = category or "All tracked cards"
+    since = suspended(tier)
+    if since:
+        body = (f'<span class="eyebrow">The RazMania {esc(name)}</span><span class="big" style="font-size:1.6em;color:var(--ink3)">Suspended</span>'
+                + suspended_note(since)
+                + f'<div class="foot"><span>Sales over {fl}</span>{attribution("index")}</div>')
+        return shell("RazMania Index", body, theme, size, accent)
     if not rows:
         body = (f'<span class="eyebrow">The RazMania {esc(name)}</span><p class="empty">No settled data for '
                 f'{esc(label)} yet.</p><div class="foot"><span>Sales over {fl}</span>{attribution("index")}</div>')
@@ -238,6 +263,8 @@ def embed_movers(tier: str = Query("all", pattern="^(all|bluechip)$"), count: in
                   FROM mv_market_index
                  WHERE tier = %s AND settled AND vertical <> 'All' AND pct_change_7d IS NOT NULL
                  ORDER BY vertical, as_of DESC""", (tier,))
+    since = suspended(tier)
+    rows = [] if since else rows
     rows = sorted(rows, key=lambda r: -abs(float(r["pct_change_7d"])))[:count]
     rows = sorted(rows, key=lambda r: -float(r["pct_change_7d"]))
     fl = money(q("SELECT (SELECT v::numeric FROM schema_meta WHERE k=%s) AS v",
@@ -249,7 +276,9 @@ def embed_movers(tier: str = Query("all", pattern="^(all|bluechip)$"), count: in
         f'<span class="bar"><i style="width:{abs(float(r["pct_change_7d"])) / mx * 100:.0f}%;'
         f'background:var(--{"up" if float(r["pct_change_7d"]) >= 0 else "down"})"></i></span></span>'
         f'<span class="p">{pct(r["pct_change_7d"])}</span></li>' for r in rows)
-    if not rows:
+    if since:
+        items = "<li>" + suspended_note(since) + "</li>"
+    elif not rows:
         items = '<li class="empty">Not enough settled history yet.</li>'
     body = (f'<span class="eyebrow">Market movers · 7 days</span>'
             f'<p class="title">{"Blue chip" if tier == "bluechip" else "Card market"} by category</p>'
@@ -303,6 +332,8 @@ def badge_index(tier: str = TIER, category: str = CATEGORY, theme: str = Query("
     dark = theme == "dark"
     bg, ink, ink3 = ("#14110D", "#F3EFE8", "#9A928A") if dark else ("#FFFFFF", "#14110D", "#6E6862")
     up, down = ("#5BD97E", "#FF7B6B") if dark else ("#0a7d33", "#b3261e")
+    if suspended(tier):
+        rows = []
     if rows:
         last = rows[-1]
         val = f"{float(last['index_value']):.2f}"
@@ -311,7 +342,7 @@ def badge_index(tier: str = TIER, category: str = CATEGORY, theme: str = Query("
         chc = ink3 if ch is None else (up if float(ch) > 0.05 else (down if float(ch) < -0.05 else ink3))
         sub = esc(category or "all tracked cards") + " · " + esc(nice_date(last["as_of"]))
     else:
-        val, chs, chc, sub = "—", "building", ink3, "no settled data yet"
+        val, chs, chc, sub = "—", "suspended" if suspended(tier) else "building", ink3,             "publication paused: data quality" if suspended(tier) else "no settled data yet"
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="260" height="64" viewBox="0 0 260 64" role="img" aria-label="RazMania {esc(name)} {val}">
 <rect width="260" height="64" rx="10" fill="{bg}" stroke="{ink3}" stroke-opacity=".35"/>
 <rect x="0" y="0" width="6" height="64" rx="3" fill="#{esc(accent)}"/>
