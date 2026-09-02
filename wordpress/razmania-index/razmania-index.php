@@ -2,7 +2,7 @@
 /**
  * Plugin Name: RazMania Index
  * Description: The RazMania Index — a daily, methodology-backed measure of the trading-card market, built from confirmed eBay sales with best-offer listings excluded. Renders entirely server-side.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      RazMania
  *
  * This is a SEPARATE plugin from razmania-cards, on purpose. The production
@@ -18,7 +18,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('RZI_VERSION',    '1.0.0');
+define('RZI_VERSION',    '1.0.1');
 define('RZI_METHOD_VER', '1.0');            // bump when the METHODOLOGY changes
 define('RZI_CACHE_TTL',  30 * MINUTE_IN_SECONDS);
 
@@ -568,6 +568,8 @@ add_action('wp_enqueue_scripts', function () {
     .rzi-up{color:var(--up,#0a7d33)}.rzi-down{color:var(--down,#b3261e)}.rzi-flat,.rzi-muted{color:var(--rzi-ink3)}
     .rzi-muted{font-size:13px}
     .rzi-eyebrow{display:block;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--rzi-gold)}
+    /* Explicit colour: the theme styles bare h1/h2/h3 as faint page titles, and an element rule beats inheritance. */
+    .rzi-h1,.rzi-h2,.rzi h3,.rzi-hero-h{color:var(--rzi-ink)}
     .rzi-h1{font-family:Georgia,"Times New Roman",serif;font-weight:700;font-size:clamp(40px,6vw,68px);line-height:1;letter-spacing:-.02em;margin:10px 0 18px}
     .rzi-h2{font-family:Georgia,"Times New Roman",serif;font-size:clamp(24px,3vw,32px);line-height:1.15;margin:0}
     .rzi-dek{font-size:clamp(17px,2vw,21px);line-height:1.45;color:var(--rzi-ink2);max-width:62ch;margin:0 0 28px}
