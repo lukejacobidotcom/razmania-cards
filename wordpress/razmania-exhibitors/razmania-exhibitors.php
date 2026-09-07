@@ -614,7 +614,7 @@ function rzx_render_index() {
     <article class="rzx-page rzx-index">
       <header class="rzx-mast">
         <span class="rzx-eyebrow"><?php echo rzx_h(rzx_event_name()); ?> &middot; <?php echo rzx_h(rzx_event_dates()); ?></span>
-        <h1 class="rzx-h1">Meet the floor</h1>
+        <h1 class="rzx-h1">Shops You Can Trust</h1>
         <p class="rzx-dek">Every exhibitor below <?php echo $verb; ?> a confirmed table at the <?php echo rzx_h(rzx_venue()); ?>, and <?php echo (int)$full; ?> of them have a profile we wrote and checked: what they deal in, where they are from, and how to reach them.
           <a class="rzx-vlink" href="<?php echo esc_url(home_url('/exhibitors/verified/')); ?>"><i class="rzx-tick">&#10003;</i> What the Verified Exhibitor stamp means</a></p>
         <?php if (rzx_rankings()['lists']): ?>
