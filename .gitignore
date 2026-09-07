@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 *.egg-info/
 lists/
+wordpress/dist/
+exhibitors/data/logo-cache/

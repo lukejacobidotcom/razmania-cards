@@ -1,0 +1,6 @@
+{
+  "error": {
+    "type": "user-or-token-not-found",
+    "message": "User was not found or authentication token is not valid"
+  }
+}

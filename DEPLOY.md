@@ -163,6 +163,37 @@ already exists" — WP File Manager can rename or remove it.
 
 ---
 
+## Step 6 — Exhibitor profiles on razmania.com (10 min)
+
+The exhibitor directory and every profile move off razmaniasports.com (where
+a Swoogo snippet painted them client-side and Google indexed empty "Sponsor
+Details" shells) onto razmania.com, server-rendered from one JSON file.
+
+```bash
+python -X utf8 exhibitors/build_profiles.py       # scrape Swoogo -> exhibitors/profiles.json + plugin copy
+python wordpress/build_zip.py razmania-exhibitors # -> wordpress/dist/razmania-exhibitors.zip
+```
+
+Then: Plugins -> Add New -> Upload the zip, activate, **deactivate "RazMania
+Exhibitor Share Meta"** (superseded), Settings -> RazMania Exhibitors (tickets
+URL; event status defaults to Past), and purge `/exhibitors/*` in Cloudflare -
+the cached response for `/exhibitors/` is still the News page. If the routes
+404, Settings -> Permalinks -> Save once. View source on
+`/exhibitors/614-rips/`: tagline, editorial and table numbers must be in the
+raw HTML. Full notes in `wordpress/razmania-exhibitors/README.md`; the
+ranking and accolade plan is in `exhibitors/RANKINGS.md`.
+
+### Done on 3 Sep 2026
+
+`razmania-exhibitors` 1.2.0 is installed and active (1.2.0 added
+`/exhibitors/best/`, the ten ranked lists; see `exhibitors/RANKINGS.md`). The Share Meta plugin was
+never installed, so nothing to deactivate. The live `razmania-cards` 1.12
+plugin already owned `/exhibitors/<slug>/` with 54 older profiles; this plugin
+now answers those routes first (see its README, "The older razmania.com
+exhibitor system"). Tickets URL not set yet (ticket buttons hidden). Cloudflare
+was not purged from here - bare URLs cached before the deploy may serve the
+old page for up to 31 days; `?x=1` shows the live one.
+
 ## When to change the floor
 
 Drop `MIN_PRICE` to `500` (and `publish_floor` in `db/schema.sql` to match, then

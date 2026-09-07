@@ -1,0 +1,84 @@
+{
+ "handle_overrides": {
+  "Los Amigos Cards and Collectables": {
+   "use": "los_amigos_candc",
+   "was": "marianorivera_26",
+   "reason": "marianorivera_26 is the owner's personal athlete account; los_amigos_candc is the business (bio: 'Owner- @marianorivera_26')."
+  }
+ },
+ "do_not_link_or_embed": [
+  {
+   "handle": "marianorivera_26",
+   "who": "Los Amigos",
+   "why": "personal athlete account"
+  },
+  {
+   "handle": "b_banasiak17",
+   "who": "Brads Slabs",
+   "why": "personal account (MSU student bio), no card business content, no business account found"
+  },
+  {
+   "handle": "yonko.ttan",
+   "who": "Sari Sari TCG",
+   "why": "owner personal account named in bio"
+  },
+  {
+   "handle": "yonko.azu",
+   "who": "Sari Sari TCG",
+   "why": "owner personal account named in bio"
+  },
+  {
+   "handle": "james_nahikian",
+   "who": "Orange Cards",
+   "why": "owner personal account named in bio ('Personal: @james_nahikian')"
+  },
+  {
+   "handle": "matt_foddrill",
+   "who": "Fodder TCG",
+   "why": "owner personal account named in bio"
+  }
+ ],
+ "needs_your_decision": [
+  {
+   "who": "Showboat Breaks",
+   "option_a": {
+    "handle": "showboat13",
+    "followers": 1324,
+    "posts": 162,
+    "verified": true,
+    "note": "active account, named 'Showboat Breaks', but bio is personal (fandom/heritage), not business info"
+   },
+   "option_b": {
+    "handle": "showboatbreaks",
+    "followers": 157,
+    "posts": 7,
+    "verified": false,
+    "note": "on-brand handle but effectively empty - no bio, 7 posts"
+   }
+  }
+ ],
+ "dead_handles": [
+  {
+   "handle": "Sbisser161sportscards",
+   "who": "Sbisser161 Sports Cards",
+   "status": "not_found"
+  },
+  {
+   "handle": "chknwffles",
+   "who": "LT Legacy Sports Cards",
+   "status": "not_found"
+  },
+  {
+   "handle": "BadBoyzCollectibles",
+   "who": "Bad Boyz Collectibles",
+   "status": "not_found - I derived this from the company name; they left the field blank"
+  }
+ ],
+ "no_usable_account": [
+  {
+   "who": "CaptainCards",
+   "handle": "captaincards",
+   "why": "0 followers, 1 post, empty bio - nothing to build from"
+  }
+ ]
+}

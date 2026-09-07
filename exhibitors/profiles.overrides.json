@@ -1,0 +1,22 @@
+{
+ "_readme": "Hand corrections applied on top of the scraped Swoogo data by build_profiles.py. Edit here, never in profiles.json. Keys under `exhibitors` are Swoogo sponsor ids; any field of the built row can be overridden. `accolades` entries are appended to the row's list.",
+ "exclude": {
+  "1123800": "Duplicate of 1124600 FireRips (two records, one vendor) - exhibitors/pending_updates.json data_issues",
+  "1124389": "Duplicate of 1113773 The Card Cave MI"
+ },
+ "rename": {
+  "1125605": "SnapShot Sports Cards"
+ },
+ "_legacy_redirects": "Old razmania.com slugs (emailed to exhibitors in Aug 2026) whose Swoogo slug differs. The build 301s old -> new. Names that match automatically need no entry.",
+ "legacy_redirects": {
+  "detroit-sportscards": "detroit-sports-cards",
+  "diesels-dugout": "diesel-s-dugout",
+  "foddertcg": "fodder-tcg",
+  "pokedealswithjake": "pokedeals-with-jake",
+  "miller-s-sports-cards-collectibles": "miller-s-sports-cards-and-collectibles",
+  "mint-cards-collectibles": "mint-cards-and-collectibles",
+  "all-in-sports-card": "all-in-sports-cards"
+ },
+ "exhibitors": {},
+ "accolades": {}
+}

@@ -1,0 +1,63 @@
+{
+ "_note": "Ready to apply to Swoogo snippet 21011 registry (REG/TAG/ED) once admin login is restored.",
+
+ "fixes": {
+  "1122107": {
+   "_who": "Sbisser161 (Shane Bissonette) — PRIVACY REQUEST, currently live",
+   "_removes": "ALL reference to law enforcement, at his request.",
+   "ig": "sbisser161sportscards",
+   "s": "Michigan sports cards — buy, sell and trade, from a veteran-owned table.",
+   "c": ["Michigan", "Sports cards", "Veteran-owned"],
+   "tag": "Veteran-owned, Michigan sports cards.",
+   "ed": "Sbisser161 is Shane Bissonette, an Army veteran running a Michigan sports card table. Buy, sell and trade across the board, with Michigan teams close to the centre of it — a table where the conversation tends to run longer than the transaction."
+  },
+  "1123233": {
+   "_who": "VTM Vending (Ryan Petrill) — asked twice how to update",
+   "u": "https://vtmvending.com/",
+   "s": "Smart vending machines built in Cleveland — and yes, they vend trading cards.",
+   "c": ["Cleveland, OH", "Smart vending", "Card vending"],
+   "tag": "Vending machines that sell cards.",
+   "ed": "VTM build smart vending machines in Cleveland and run them in over 1,500 locations across all 50 states, at a $20M annualised run rate. The reason they matter on this floor: their machines vend Pokemon and baseball cards alongside everything else, with age-verification scanners built in. Worth a look if you have ever wondered what a card vending machine actually costs."
+  }
+ },
+
+ "new_profiles": {
+  "1124708": {"n": "ABJ Cards", "ig": "abjcards", "s": "Aaron Ball Jr., buying strong out of Des Moines — sell him anything $20 and up.", "c": ["Des Moines, IA", "Sports cards", "Buying"], "tag": "Sell him anything $20 and up.", "ed": "ABJ is Aaron Ball Jr., and the pitch is refreshingly blunt: paying strong, sell me everything twenty dollars and up. He travels in from Des Moines, one of the further-flung buyers on this floor, and a sensible first stop if you arrived carrying rather than browsing."},
+  "1124305": {"n": "Bank Of Cardz", "ig": "bankofcardz", "s": "Lansing and West Bloomfield — Michigan cards, bought and sold.", "c": ["Lansing / West Bloomfield, MI", "Sports cards"], "tag": "Lansing to West Bloomfield.", "ed": "Bank Of Cardz work out of Lansing and West Bloomfield with close to 700 following. A Michigan operation running on both sides of the state, which usually means inventory that has passed through a lot of hands before it reaches a table."},
+  "1124599": {"n": "Doc and Treyday", "ig": "docandtreyday", "s": "A father-and-son table — Larry, an old army medic, and his son Trey.", "c": ["Father & son", "Sports cards", "Whatnot"], "tag": "Doc and his son Trey.", "ed": "Doc is Larry, an old army medic — hence the name — and Treyday is his son. They run the table together and do Whatnot shows between events, 300 posts into a lifelong collecting habit. One of the few tables here where the story behind it is the point."},
+  "1124803": {"n": "DNA Packs", "ig": "dnapacks", "s": "Football, basketball and baseball, in from West Virginia.", "c": ["West Virginia", "Football", "Basketball", "Baseball"], "tag": "In from West Virginia.", "ed": "DNA Packs cover football, basketball and baseball and travel in from West Virginia, which is a long way to bring a table. They buy as readily as they sell — DM us to sell your cards is the standing line."},
+  "1125176": {"n": "DrCollectsTCG", "ig": "drcollectstcg", "s": "One Piece and Riftbound out of Michigan — buy, sell, trade.", "c": ["Michigan", "One Piece", "Riftbound"], "tag": "One Piece and Riftbound.", "ed": "Doctor Collects is one of the few tables leaning into One Piece and Riftbound rather than the usual Pokemon-and-sports split. Michigan based, buying, selling and trading, and worth finding if those are the games you actually play."},
+  "1124552": {"n": "Dubs Vault TCG", "ig": "dubsvaulttcg", "s": "Buy, sell, trade, collect.", "c": ["TCG", "Buy & trade"], "tag": "Buy, sell, trade, collect.", "ed": "Dubs Vault keep the pitch to four words — buy, sell, trade, collect. A newer TCG table, which often means keener pricing than the established shops."},
+  "1124387": {"n": "Haus of Slabs", "ig": "hausofslabs", "s": "Ultra-rare trading cards — DM to sell slabs.", "c": ["Slabs", "Ultra rare", "Buying"], "tag": "Ultra rare, slabbed.", "ed": "Haus of Slabs deal at the rare end — 4,000 following built on ultra-rare trading cards, and an open invitation to send them slabs you want to sell. Associated with the Pop 1 card show. A table for people chasing the top of the print run."},
+  "1124524": {"n": "Kresch Cards", "ig": "kreschcards", "u": "http://kreschcards.com/", "s": "Adam Kresch — buying, selling and collecting, with a shop online.", "c": ["Sports cards", "Buying", "Online shop"], "tag": "Some live paycheck to paycheck. We live card to card.", "ed": "Kresch Cards is Adam Kresch, 1,900 following and nearly 400 posts deep, with a line that tells you everything: some live paycheck to paycheck, we live card to card. Buying, selling and collecting, with an online store running alongside the shows."},
+  "1124290": {"n": "Moodz Cards", "ig": "moodzcards", "s": "NBA and NFL out of Detroit — buying, selling and trading.", "c": ["Detroit", "NBA", "NFL"], "tag": "Detroit basketball and football.", "ed": "Moodz run NBA and NFL out of Detroit, with a personal collection built around the Pistons, Kevin Garnett, Joe Johnson and Luka Doncic. If you collect Detroit basketball, this is a table that will actually talk about it."},
+  "1124801": {"n": "Moosemart TCG", "ig": "moosemarttcg", "u": "http://linktr.ee/moosemarttcg", "s": "Pokemon, slabs and singles.", "c": ["Pokemon", "Slabs"], "tag": "Pokemon, slabs and singles.", "ed": "Moose Mart keep to Pokemon — slabs and singles, nothing else. A focused table for a single game."},
+  "1124287": {"n": "Motown Breaks", "ig": "motownbreaks", "u": "http://www.motownbreaks.com", "s": "Professional card cleaning and grading.", "c": ["Cleaning & grading", "Detroit"], "tag": "Cleaning and grading, professionally.", "ed": "Motown Breaks do something almost nobody else on this floor does: professional card cleaning and grading prep. If you have a card you suspect would grade higher than it currently does, this is the table to put it in front of."},
+  "1124706": {"n": "ST Sports Cards", "ig": "stsportscards", "s": "Steve and Tyler — cards, jerseys and memorabilia, all available to trade or buy.", "c": ["Sports cards", "Memorabilia", "Trades"], "tag": "Steve and Tyler's table.", "ed": "ST is Steve and Tyler, running cards, jerseys and memorabilia with everything on the table open to trade as well as sale. Boston based, so the inventory skews differently from the Michigan tables around them."},
+  "1124312": {"n": "The Mewseum", "ig": "themewseum", "s": "A collection built entirely around Mew and Mewtwo.", "c": ["Pokemon", "Mew & Mewtwo"], "tag": "Mew and Mewtwo, exclusively.", "ed": "The Mewseum is exactly what it sounds like — a collection built entirely around Mew and Mewtwo, run out of New Jersey. If you collect one Pokemon line seriously, this is the table that will understand why."},
+  "1124793": {"n": "Underdog Collectibles", "ig": "underdogcollectibles", "u": "https://linktr.ee/underdogcollectibles", "s": "Always bet on the underdog — 2,400 posts and 5,000 following.", "c": ["Sports cards", "Collectibles"], "tag": "Always bet on the underdog.", "ed": "Underdog carry the largest following of any recent addition — 5,000 on Instagram across 2,400 posts, trading under #AlwaysBetOnTheUnderdog. A collectibles store with a long track record behind the table."},
+  "1124525": {"n": "Game Time Hobby Shop", "ig": "gametimehobbyshop", "u": "http://www.gametimehobbyshop.com/", "s": "Retro games, sports cards, Pokemon and TCG — a shop that buys and trades daily.", "c": ["Retro games", "Sports cards", "Pokemon", "Storefront"], "tag": "Retro games and cards under one roof.", "ed": "GameTime run a bricks-and-mortar shop combining retro video games with sports cards, Pokemon and TCG, open every day and buying and trading daily, with nearly 10,000 following. The games-and-cards crossover is rare on this floor.", "_verify": "Instagram bio says Bay Area, not Michigan. Confirm same business before publishing."}
+ },
+
+ "rejected": {
+  "Khanz Karz": "@khanzkarz is a photography/videography account, not a card business. Wrong account — do not link.",
+  "Tri-Covery": "@tricovery empty (0 posts, 0 followers). No usable data.",
+  "Bala Sports": "@balasports 4 followers, 0 posts. Not enough to publish.",
+  "Motown Cards": "@motowncards 1 follower, 0 posts. Note: distinct business from Motown Breaks.",
+  "Global Soccer": "@globalsoccer 8 followers, 1 post, generic fan page — probably not the exhibitor.",
+  "Detroit Sports Cards": "@detroitsportscards has 1,597 followers but 0 posts and no bio — cannot verify it is them."
+ },
+
+ "not_found": ["Hitting Touchdowns", "Matcha Mew & Co.", "Dan-Good Collectibles", "SnapShot Sorts Cards", "Hidden Gemz", "Mitchell's Landing", "DoublePull Collectibles", "Somerset", "Cole Street Collision"],
+
+ "data_issues": {
+  "duplicate_sponsors": [
+   {"ids": ["1123800 Fire Rips", "1124600 FireRips"], "action": "Same vendor, two records — delete one"},
+   {"ids": ["1113773 The Card Cave MI", "1124389 The Card Cave MI"], "action": "Exact duplicate name — delete one"}
+  ],
+  "typos": [
+   {"id": "1125605", "is": "SnapShot Sorts Cards", "should_be": "SnapShot Sports Cards"},
+   {"id": "1123421", "is": "Epic Collectibles", "should_be": "Epik Collectibles"}
+  ]
+ }
+}

@@ -1,0 +1,1175 @@
+{
+ "year": 2026,
+ "method": "Ranked by Instagram audience, the largest count we hold from any source as of August 2026, and where two tables have no count, by how complete their RazMania profile is. Membership comes from each exhibitor's own registration; nothing is placed by hand, nothing can be bought, and sponsors are not ranked. No exhibitor is #1 in more than one list.",
+ "best_cutoff": 5,
+ "lists": [
+  {
+   "key": "breaks",
+   "title": "Break Kings",
+   "strapline": "The tables that rip on camera.",
+   "who": "Every exhibitor who runs live breaks or rips at the table.",
+   "field": 9,
+   "entries": [
+    {
+     "rank": 1,
+     "id": "1123798",
+     "slug": "bridgeport-hobby",
+     "name": "Bridgeport Hobby",
+     "logo": "",
+     "tagline": "Four blocks from White Sox Park.",
+     "followers": 17687,
+     "location": "Chicago",
+     "tier": "best"
+    },
+    {
+     "rank": 2,
+     "id": "1124600",
+     "slug": "firerips",
+     "name": "FireRips",
+     "logo": "https://assets.swoogo.com/uploads/full/7454479-6a88bcf76270f.png",
+     "tagline": "Breaks, live.",
+     "followers": 2477,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 3,
+     "id": "1118359",
+     "slug": "showboat-breaks",
+     "name": "Showboat Breaks",
+     "logo": "https://assets.swoogo.com/uploads/full/7401948-6a7c825a41b3f.png",
+     "tagline": "Detroit breaks.",
+     "followers": 1324,
+     "location": "Detroit, MI",
+     "tier": "best"
+    },
+    {
+     "rank": 4,
+     "id": "1112486",
+     "slug": "jmc-sports",
+     "name": "JMC Sports",
+     "logo": "https://assets.swoogo.com/uploads/full/7361356-6a722be6cfde8.jpeg",
+     "tagline": "Detroit and Michigan, signed.",
+     "followers": 0,
+     "location": "Lapeer, MI",
+     "tier": "best"
+    },
+    {
+     "rank": 5,
+     "id": "1119271",
+     "slug": "11-yard-line-collectors",
+     "name": "11 Yard Line Collectors",
+     "logo": "https://assets.swoogo.com/uploads/full/7404099-6a7cb2664275d.jpg",
+     "tagline": "Breaking live to a room of 2,000.",
+     "followers": 0,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 6,
+     "id": "1117906",
+     "slug": "d-town-rips",
+     "name": "D-Town Rips",
+     "logo": "https://assets.swoogo.com/uploads/full/7397558-6a7b71659d4d2.png",
+     "tagline": "Detroit rips, three tables wide.",
+     "followers": 0,
+     "location": "Detroit",
+     "tier": "certified"
+    },
+    {
+     "rank": 7,
+     "id": "1117608",
+     "slug": "batter-up-breaks",
+     "name": "Batter Up Breaks",
+     "logo": "https://assets.swoogo.com/uploads/full/7395848-6a7b3b33d9f4e.jpeg",
+     "tagline": "Four sports, live breaks.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 8,
+     "id": "1115922",
+     "slug": "turkish-breaks",
+     "name": "Turkish Breaks",
+     "logo": "https://assets.swoogo.com/uploads/full/7380659-6a75fe144eb19.jpg",
+     "tagline": "Breaks, plus a grading service.",
+     "followers": 0,
+     "location": "Michigan",
+     "tier": "certified"
+    },
+    {
+     "rank": 9,
+     "id": "1126331",
+     "slug": "buddy-breaks",
+     "name": "Buddy Breaks",
+     "logo": "https://assets.swoogo.com/uploads/full/7467317-6a8dd061485a9.jpeg",
+     "tagline": "Two tables of breaks.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    }
+   ]
+  },
+  {
+   "key": "shops",
+   "title": "Card Shop All-Stars",
+   "strapline": "Bricks-and-mortar tables you can visit all year.",
+   "who": "Exhibitors who run a real storefront or hobby shop.",
+   "field": 13,
+   "entries": [
+    {
+     "rank": 1,
+     "id": "1124525",
+     "slug": "game-time-hobby-shop",
+     "name": "Game Time Hobby Shop",
+     "logo": "https://assets.swoogo.com/uploads/medium/7453307-6a888c9ef10fb.jpg",
+     "tagline": "Retro games and cards under one roof.",
+     "followers": 10000,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 2,
+     "id": "1123798",
+     "slug": "bridgeport-hobby",
+     "name": "Bridgeport Hobby",
+     "logo": "",
+     "tagline": "Four blocks from White Sox Park.",
+     "followers": 17687,
+     "location": "Chicago",
+     "tier": "best"
+    },
+    {
+     "rank": 3,
+     "id": "1122024",
+     "slug": "z-s-sports-house-of-cards",
+     "name": "Z's Sports House of Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7433680-6a84a5f937a39.jpeg",
+     "tagline": "Sports cards, straight up.",
+     "followers": 5685,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 4,
+     "id": "1123261",
+     "slug": "orange-cards",
+     "name": "Orange Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7444880-6a86fe5511efa.png",
+     "tagline": "Metro Detroit, in orange.",
+     "followers": 4000,
+     "location": "Metro Detroit",
+     "tier": "best"
+    },
+    {
+     "rank": 5,
+     "id": "1112296",
+     "slug": "detroit-legends-sports",
+     "name": "Detroit Legends Sports",
+     "logo": "https://assets.swoogo.com/uploads/full/7359257-6a71fced2aa5d.png",
+     "tagline": "A card shop with a storefront and a Discord.",
+     "followers": 2460,
+     "location": "Shelby Twp, MI",
+     "tier": "best"
+    },
+    {
+     "rank": 6,
+     "id": "1124524",
+     "slug": "kresch-cards",
+     "name": "Kresch Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7453278-6a888bbd83428.png",
+     "tagline": "Some live paycheck to paycheck. We live card to card.",
+     "followers": 1900,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 7,
+     "id": "1108495",
+     "slug": "614-rips",
+     "name": "614 Rips",
+     "logo": "https://assets.swoogo.com/uploads/full/7326811-6a69187947534.jpeg",
+     "tagline": "Where sneaker culture and cardboard meet in Columbus.",
+     "followers": 1182,
+     "location": "Columbus, Ohio",
+     "tier": "certified"
+    },
+    {
+     "rank": 8,
+     "id": "1117474",
+     "slug": "fat-katz",
+     "name": "Fat Katz",
+     "logo": "https://assets.swoogo.com/uploads/full/7394883-6a7b21d505c82.png",
+     "tagline": "Cards, Hot Wheels and a kids' trade day.",
+     "followers": 0,
+     "location": "St. Clair Shores, MI",
+     "tier": "certified"
+    },
+    {
+     "rank": 9,
+     "id": "1106027",
+     "slug": "mint-cards-and-collectibles",
+     "name": "Mint Cards & Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/full/7325916-6a68fe92edb81.jpeg",
+     "tagline": "Four friends, one Lake Orion shop.",
+     "followers": 0,
+     "location": "Lake Orion, MI",
+     "tier": "certified"
+    },
+    {
+     "rank": 10,
+     "id": "1113173",
+     "slug": "miller-s-sports-cards-and-collectibles",
+     "name": "Miller's Sports Cards & Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/medium/7367694-6a7368dc75d60.png",
+     "tagline": "Mid-Michigan's card counter.",
+     "followers": 0,
+     "location": "Mount Pleasant, MI",
+     "tier": "certified"
+    }
+   ]
+  },
+  {
+   "key": "memorabilia",
+   "title": "Memorabilia Legends",
+   "strapline": "Signed, framed, game-worn.",
+   "who": "Exhibitors listed under memorabilia, signings or autographs.",
+   "field": 10,
+   "entries": [
+    {
+     "rank": 1,
+     "id": "1117136",
+     "slug": "secret-lair-collectibles",
+     "name": "Secret Lair Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/medium/7391824-6a7a3727b9f06.jpeg",
+     "tagline": "Crestwood's collectibles clubhouse.",
+     "followers": 877,
+     "location": "Crestwood, IL",
+     "tier": "best"
+    },
+    {
+     "rank": 2,
+     "id": "1110774",
+     "slug": "rob-s-pop-shop",
+     "name": "Rob's Pop Shop",
+     "logo": "https://assets.swoogo.com/uploads/full/7345059-6a6d130d2f893.png",
+     "tagline": "Pops, prints and Pokémon.",
+     "followers": 457,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 3,
+     "id": "1123238",
+     "slug": "victory-cards-and-collectibles",
+     "name": "Victory Cards and Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/full/7444781-6a86f9fd83328.jpeg",
+     "tagline": "Michigan sports, bought and sold.",
+     "followers": 47,
+     "location": "Michigan",
+     "tier": "best"
+    },
+    {
+     "rank": 4,
+     "id": "1112486",
+     "slug": "jmc-sports",
+     "name": "JMC Sports",
+     "logo": "https://assets.swoogo.com/uploads/full/7361356-6a722be6cfde8.jpeg",
+     "tagline": "Detroit and Michigan, signed.",
+     "followers": 0,
+     "location": "Lapeer, MI",
+     "tier": "best"
+    },
+    {
+     "rank": 5,
+     "id": "1113173",
+     "slug": "miller-s-sports-cards-and-collectibles",
+     "name": "Miller's Sports Cards & Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/medium/7367694-6a7368dc75d60.png",
+     "tagline": "Mid-Michigan's card counter.",
+     "followers": 0,
+     "location": "Mount Pleasant, MI",
+     "tier": "best"
+    },
+    {
+     "rank": 6,
+     "id": "1105602",
+     "slug": "one-team-international-agency-otia",
+     "name": "One Team International Agency (OTIA)",
+     "logo": "https://assets.swoogo.com/uploads/medium/7267809-6a57d2aed400e.jpeg",
+     "tagline": "Twenty years of high-end deals.",
+     "followers": 0,
+     "location": "Ann Arbor, MI",
+     "tier": "certified"
+    },
+    {
+     "rank": 7,
+     "id": "1105605",
+     "slug": "sebok-cards",
+     "name": "Sebok Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7350690-6a70a183f30d0.png",
+     "tagline": "Rookie patch autos and graded singles.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 8,
+     "id": "1116155",
+     "slug": "sportskid-podcast",
+     "name": "SportsKid Podcast",
+     "logo": "https://assets.swoogo.com/uploads/full/7382960-6a7655b61ec3b.jpg",
+     "tagline": "A kid, his dad, and Detroit sports.",
+     "followers": 0,
+     "location": "Detroit, MI",
+     "tier": "certified"
+    },
+    {
+     "rank": 9,
+     "id": "1106212",
+     "slug": "cbs-sportscards",
+     "name": "CBS SportsCards",
+     "logo": "https://assets.swoogo.com/uploads/full/7310472-6a63af034aecd.jpg",
+     "tagline": "Cards and memorabilia.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 10,
+     "id": "1124706",
+     "slug": "st-sports-cards",
+     "name": "ST Sports Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7456123-6a8b1bfd0b796.png",
+     "tagline": "Steve and Tyler's table.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    }
+   ]
+  },
+  {
+   "key": "tcg",
+   "title": "TCG Trailblazers",
+   "strapline": "One Piece, Riftbound, Lorcana and beyond.",
+   "who": "Trading-card-game tables outside Pokémon.",
+   "field": 9,
+   "entries": [
+    {
+     "rank": 1,
+     "id": "1111257",
+     "slug": "mmd-cards",
+     "name": "MMD Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7353170-6a70d55f38408.png",
+     "tagline": "One Piece and Pokémon, deep.",
+     "followers": 3475,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 2,
+     "id": "1119607",
+     "slug": "pokedeals-with-jake",
+     "name": "PokeDeals With Jake",
+     "logo": "https://assets.swoogo.com/uploads/full/7409010-6a7ddc4356f9f.png",
+     "tagline": "Half the case is Riftbound now.",
+     "followers": 286,
+     "location": "Michigan",
+     "tier": "best"
+    },
+    {
+     "rank": 3,
+     "id": "1125603",
+     "slug": "sari-sari-tcg",
+     "name": "Sari Sari TCG",
+     "logo": "https://assets.swoogo.com/uploads/full/7464875-6a8d8858cf461.jpg",
+     "tagline": "Pokémon and One Piece, Michigan crew.",
+     "followers": 119,
+     "location": "Michigan",
+     "tier": "best"
+    },
+    {
+     "rank": 4,
+     "id": "1116737",
+     "slug": "the-kanto-emporium",
+     "name": "The Kanto Emporium",
+     "logo": "https://assets.swoogo.com/uploads/full/7389050-6a79ed4aa0194.png",
+     "tagline": "Custom prints and displays, made to order.",
+     "followers": 0,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 5,
+     "id": "1126332",
+     "slug": "decktradr",
+     "name": "DeckTradr",
+     "logo": "https://assets.swoogo.com/uploads/full/7467392-6a8dd2c203c1c.png",
+     "tagline": "Trade your way up.",
+     "followers": 0,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 6,
+     "id": "1125176",
+     "slug": "drcollectstcg",
+     "name": "DrCollectsTCG",
+     "logo": "https://assets.swoogo.com/uploads/full/7461730-6a8ca532846e9.jpeg",
+     "tagline": "One Piece and Riftbound.",
+     "followers": 0,
+     "location": "Michigan",
+     "tier": "certified"
+    },
+    {
+     "rank": 7,
+     "id": "1124552",
+     "slug": "dubs-vault-tcg",
+     "name": "Dubs Vault TCG",
+     "logo": "https://assets.swoogo.com/uploads/full/7453560-6a889620775f4.jpg",
+     "tagline": "Buy, sell, trade, collect.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 8,
+     "id": "1117967",
+     "slug": "thunder-vault-collectibles",
+     "name": "Thunder Vault Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/full/7398297-6a7b886222308.jpeg",
+     "tagline": "The most electrifying Pokémon vendor on Instagram.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 9,
+     "id": "1126345",
+     "slug": "y-g-s-card-vault",
+     "name": "Y.G.'s Card Vault",
+     "logo": "https://assets.swoogo.com/uploads/full/7467574-6a8dd872d7a45.png",
+     "tagline": "Sports and TCG under one roof.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    }
+   ]
+  },
+  {
+   "key": "slabs",
+   "title": "Slab Elite",
+   "strapline": "Graded, numbered, showcase-only.",
+   "who": "Tables built around slabs, graded singles and grails.",
+   "field": 11,
+   "entries": [
+    {
+     "rank": 1,
+     "id": "1124387",
+     "slug": "haus-of-slabs",
+     "name": "Haus of Slabs",
+     "logo": "https://assets.swoogo.com/uploads/full/7452778-6a88742a60c4e.png",
+     "tagline": "Ultra rare, slabbed.",
+     "followers": 4000,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 2,
+     "id": "1117634",
+     "slug": "harvbocards",
+     "name": "HarvboCards",
+     "logo": "https://assets.swoogo.com/uploads/full/7396012-6a7b4002f05ce.png",
+     "tagline": "The PSA desk on the floor.",
+     "followers": 3641,
+     "location": "Macomb Twp, MI",
+     "tier": "best"
+    },
+    {
+     "rank": 3,
+     "id": "1120621",
+     "slug": "kruk-cards",
+     "name": "Kruk Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7422836-6a830c4160604.png",
+     "tagline": "A one-stop shop that has been buying for decades.",
+     "followers": 3267,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 4,
+     "id": "1122715",
+     "slug": "gemmint-com",
+     "name": "GemMint.com",
+     "logo": "https://assets.swoogo.com/uploads/full/7440205-6a85eb55ccd3d.png",
+     "tagline": "One of the country's biggest PSA submission groups.",
+     "followers": 2124,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 5,
+     "id": "1108495",
+     "slug": "614-rips",
+     "name": "614 Rips",
+     "logo": "https://assets.swoogo.com/uploads/full/7326811-6a69187947534.jpeg",
+     "tagline": "Where sneaker culture and cardboard meet in Columbus.",
+     "followers": 1182,
+     "location": "Columbus, Ohio",
+     "tier": "best"
+    },
+    {
+     "rank": 6,
+     "id": "1112475",
+     "slug": "salmo-bros-collectibles",
+     "name": "Salmo Bros Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/full/7361039-6a7224368b3aa.png",
+     "tagline": "Grails and good vibes.",
+     "followers": 96,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 7,
+     "id": "1106027",
+     "slug": "mint-cards-and-collectibles",
+     "name": "Mint Cards & Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/full/7325916-6a68fe92edb81.jpeg",
+     "tagline": "Four friends, one Lake Orion shop.",
+     "followers": 0,
+     "location": "Lake Orion, MI",
+     "tier": "certified"
+    },
+    {
+     "rank": 8,
+     "id": "1105605",
+     "slug": "sebok-cards",
+     "name": "Sebok Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7350690-6a70a183f30d0.png",
+     "tagline": "Rookie patch autos and graded singles.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 9,
+     "id": "1115920",
+     "slug": "benchmark-card-co",
+     "name": "Benchmark Card Co.",
+     "logo": "https://assets.swoogo.com/uploads/full/7380630-6a75fceb5e65d.png",
+     "tagline": "They answer every DM.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 10,
+     "id": "1124801",
+     "slug": "moosemart-tcg",
+     "name": "Moosemart TCG",
+     "logo": "https://assets.swoogo.com/uploads/full/7458498-6a8c3f6dad718.png",
+     "tagline": "Pokémon, slabs and singles.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    }
+   ]
+  },
+  {
+   "key": "trades",
+   "title": "Trade Table Champions",
+   "strapline": "Bring the binder.",
+   "who": "Every exhibitor who trades at the table.",
+   "field": 18,
+   "entries": [
+    {
+     "rank": 1,
+     "id": "1122024",
+     "slug": "z-s-sports-house-of-cards",
+     "name": "Z's Sports House of Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7433680-6a84a5f937a39.jpeg",
+     "tagline": "Sports cards, straight up.",
+     "followers": 5685,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 2,
+     "id": "1116903",
+     "slug": "bad-boyz-collectibles",
+     "name": "Bad Boyz Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/full/7389772-6a7a004b1ea5f.png",
+     "tagline": "Jordan, Kobe, LeBron, Brady.",
+     "followers": 3000,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 3,
+     "id": "1112296",
+     "slug": "detroit-legends-sports",
+     "name": "Detroit Legends Sports",
+     "logo": "https://assets.swoogo.com/uploads/full/7359257-6a71fced2aa5d.png",
+     "tagline": "A card shop with a storefront and a Discord.",
+     "followers": 2460,
+     "location": "Shelby Twp, MI",
+     "tier": "best"
+    },
+    {
+     "rank": 4,
+     "id": "1118368",
+     "slug": "detroit-card-house",
+     "name": "Detroit Card House",
+     "logo": "https://assets.swoogo.com/uploads/full/7402222-6a7c85a08d525.png",
+     "tagline": "Four sports, one table.",
+     "followers": 1149,
+     "location": "Detroit, MI",
+     "tier": "best"
+    },
+    {
+     "rank": 5,
+     "id": "1111173",
+     "slug": "pok-r-us",
+     "name": "Pok_R_Us",
+     "logo": "https://assets.swoogo.com/uploads/full/7351839-6a70b1eae828a.png",
+     "tagline": "Sealed, singles and mystery boxes.",
+     "followers": 1092,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 6,
+     "id": "1120381",
+     "slug": "pirate-hunter-deegs",
+     "name": "Pirate Hunter Deegs",
+     "logo": "https://assets.swoogo.com/uploads/full/7417106-6a7f9a41cef49.jpeg",
+     "tagline": "Naruto, One Piece and Pokémon.",
+     "followers": 939,
+     "location": "Michigan",
+     "tier": "certified"
+    },
+    {
+     "rank": 7,
+     "id": "1117961",
+     "slug": "locked-in-cards",
+     "name": "Locked In Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7398155-6a7b83ddd6d19.png",
+     "tagline": "Pokémon, show to show.",
+     "followers": 335,
+     "location": "Michigan",
+     "tier": "certified"
+    },
+    {
+     "rank": 8,
+     "id": "1116738",
+     "slug": "exotictcg",
+     "name": "ExoticTCG",
+     "logo": "https://assets.swoogo.com/uploads/full/7389062-6a79eda36c526.jpeg",
+     "tagline": "Pokémon, bought and sold.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 9,
+     "id": "1106223",
+     "slug": "muk-bang-tcg",
+     "name": "Muk Bang TCG",
+     "logo": "https://assets.swoogo.com/uploads/full/7310716-6a63b99a61e7b.png",
+     "tagline": "Michigan's Pokémon show regular.",
+     "followers": 0,
+     "location": "Michigan",
+     "tier": "certified"
+    },
+    {
+     "rank": 10,
+     "id": "1115920",
+     "slug": "benchmark-card-co",
+     "name": "Benchmark Card Co.",
+     "logo": "https://assets.swoogo.com/uploads/full/7380630-6a75fceb5e65d.png",
+     "tagline": "They answer every DM.",
+     "followers": 0,
+     "location": "",
+     "tier": "certified"
+    }
+   ]
+  },
+  {
+   "key": "buying",
+   "title": "Top Buyers on the Floor",
+   "strapline": "Sell to these tables first.",
+   "who": "Every exhibitor who buys collections at the show.",
+   "field": 23,
+   "entries": [
+    {
+     "rank": 1,
+     "id": "1106032",
+     "slug": "stoney-sports-vault",
+     "name": "Stoney Sports Vault",
+     "logo": "https://assets.swoogo.com/uploads/full/7350694-6a70a1afc0240.png",
+     "tagline": "Real deals, filmed on the road.",
+     "followers": 4050,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 2,
+     "id": "1122024",
+     "slug": "z-s-sports-house-of-cards",
+     "name": "Z's Sports House of Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7433680-6a84a5f937a39.jpeg",
+     "tagline": "Sports cards, straight up.",
+     "followers": 5685,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 3,
+     "id": "1124387",
+     "slug": "haus-of-slabs",
+     "name": "Haus of Slabs",
+     "logo": "https://assets.swoogo.com/uploads/full/7452778-6a88742a60c4e.png",
+     "tagline": "Ultra rare, slabbed.",
+     "followers": 4000,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 4,
+     "id": "1120621",
+     "slug": "kruk-cards",
+     "name": "Kruk Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7422836-6a830c4160604.png",
+     "tagline": "A one-stop shop that has been buying for decades.",
+     "followers": 3267,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 5,
+     "id": "1116903",
+     "slug": "bad-boyz-collectibles",
+     "name": "Bad Boyz Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/full/7389772-6a7a004b1ea5f.png",
+     "tagline": "Jordan, Kobe, LeBron, Brady.",
+     "followers": 3000,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 6,
+     "id": "1112296",
+     "slug": "detroit-legends-sports",
+     "name": "Detroit Legends Sports",
+     "logo": "https://assets.swoogo.com/uploads/full/7359257-6a71fced2aa5d.png",
+     "tagline": "A card shop with a storefront and a Discord.",
+     "followers": 2460,
+     "location": "Shelby Twp, MI",
+     "tier": "certified"
+    },
+    {
+     "rank": 7,
+     "id": "1124524",
+     "slug": "kresch-cards",
+     "name": "Kresch Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7453278-6a888bbd83428.png",
+     "tagline": "Some live paycheck to paycheck. We live card to card.",
+     "followers": 1900,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 8,
+     "id": "1108495",
+     "slug": "614-rips",
+     "name": "614 Rips",
+     "logo": "https://assets.swoogo.com/uploads/full/7326811-6a69187947534.jpeg",
+     "tagline": "Where sneaker culture and cardboard meet in Columbus.",
+     "followers": 1182,
+     "location": "Columbus, Ohio",
+     "tier": "certified"
+    },
+    {
+     "rank": 9,
+     "id": "1118368",
+     "slug": "detroit-card-house",
+     "name": "Detroit Card House",
+     "logo": "https://assets.swoogo.com/uploads/full/7402222-6a7c85a08d525.png",
+     "tagline": "Four sports, one table.",
+     "followers": 1149,
+     "location": "Detroit, MI",
+     "tier": "certified"
+    },
+    {
+     "rank": 10,
+     "id": "1111173",
+     "slug": "pok-r-us",
+     "name": "Pok_R_Us",
+     "logo": "https://assets.swoogo.com/uploads/full/7351839-6a70b1eae828a.png",
+     "tagline": "Sealed, singles and mystery boxes.",
+     "followers": 1092,
+     "location": "",
+     "tier": "certified"
+    }
+   ]
+  },
+  {
+   "key": "pokemon",
+   "title": "Pokémon Power Tables",
+   "strapline": "The Pokémon floor, ranked.",
+   "who": "Every Pokémon table at the show.",
+   "field": 58,
+   "entries": [
+    {
+     "rank": 1,
+     "id": "1105601",
+     "slug": "atomic-tcg",
+     "name": "Atomic TCG",
+     "logo": "https://assets.swoogo.com/uploads/full/7300152-6a612e1d5dd3d.png",
+     "tagline": "The biggest following on the floor.",
+     "followers": 28000,
+     "location": "Michigan",
+     "tier": "best"
+    },
+    {
+     "rank": 2,
+     "id": "1124525",
+     "slug": "game-time-hobby-shop",
+     "name": "Game Time Hobby Shop",
+     "logo": "https://assets.swoogo.com/uploads/medium/7453307-6a888c9ef10fb.jpg",
+     "tagline": "Retro games and cards under one roof.",
+     "followers": 10000,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 3,
+     "id": "1124387",
+     "slug": "haus-of-slabs",
+     "name": "Haus of Slabs",
+     "logo": "https://assets.swoogo.com/uploads/full/7452778-6a88742a60c4e.png",
+     "tagline": "Ultra rare, slabbed.",
+     "followers": 4000,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 4,
+     "id": "1111257",
+     "slug": "mmd-cards",
+     "name": "MMD Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7353170-6a70d55f38408.png",
+     "tagline": "One Piece and Pokémon, deep.",
+     "followers": 3475,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 5,
+     "id": "1116903",
+     "slug": "bad-boyz-collectibles",
+     "name": "Bad Boyz Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/full/7389772-6a7a004b1ea5f.png",
+     "tagline": "Jordan, Kobe, LeBron, Brady.",
+     "followers": 3000,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 6,
+     "id": "1108495",
+     "slug": "614-rips",
+     "name": "614 Rips",
+     "logo": "https://assets.swoogo.com/uploads/full/7326811-6a69187947534.jpeg",
+     "tagline": "Where sneaker culture and cardboard meet in Columbus.",
+     "followers": 1182,
+     "location": "Columbus, Ohio",
+     "tier": "certified"
+    },
+    {
+     "rank": 7,
+     "id": "1111173",
+     "slug": "pok-r-us",
+     "name": "Pok_R_Us",
+     "logo": "https://assets.swoogo.com/uploads/full/7351839-6a70b1eae828a.png",
+     "tagline": "Sealed, singles and mystery boxes.",
+     "followers": 1092,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 8,
+     "id": "1120381",
+     "slug": "pirate-hunter-deegs",
+     "name": "Pirate Hunter Deegs",
+     "logo": "https://assets.swoogo.com/uploads/full/7417106-6a7f9a41cef49.jpeg",
+     "tagline": "Naruto, One Piece and Pokémon.",
+     "followers": 939,
+     "location": "Michigan",
+     "tier": "certified"
+    },
+    {
+     "rank": 9,
+     "id": "1117136",
+     "slug": "secret-lair-collectibles",
+     "name": "Secret Lair Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/medium/7391824-6a7a3727b9f06.jpeg",
+     "tagline": "Crestwood's collectibles clubhouse.",
+     "followers": 877,
+     "location": "Crestwood, IL",
+     "tier": "certified"
+    },
+    {
+     "rank": 10,
+     "id": "1110774",
+     "slug": "rob-s-pop-shop",
+     "name": "Rob's Pop Shop",
+     "logo": "https://assets.swoogo.com/uploads/full/7345059-6a6d130d2f893.png",
+     "tagline": "Pops, prints and Pokémon.",
+     "followers": 457,
+     "location": "",
+     "tier": "certified"
+    }
+   ]
+  },
+  {
+   "key": "michigan",
+   "title": "Michigan's Finest",
+   "strapline": "Hometown tables.",
+   "who": "Exhibitors based in Michigan.",
+   "field": 37,
+   "entries": [
+    {
+     "rank": 1,
+     "id": "1123261",
+     "slug": "orange-cards",
+     "name": "Orange Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7444880-6a86fe5511efa.png",
+     "tagline": "Metro Detroit, in orange.",
+     "followers": 4000,
+     "location": "Metro Detroit",
+     "tier": "best"
+    },
+    {
+     "rank": 2,
+     "id": "1105601",
+     "slug": "atomic-tcg",
+     "name": "Atomic TCG",
+     "logo": "https://assets.swoogo.com/uploads/full/7300152-6a612e1d5dd3d.png",
+     "tagline": "The biggest following on the floor.",
+     "followers": 28000,
+     "location": "Michigan",
+     "tier": "best"
+    },
+    {
+     "rank": 3,
+     "id": "1117634",
+     "slug": "harvbocards",
+     "name": "HarvboCards",
+     "logo": "https://assets.swoogo.com/uploads/full/7396012-6a7b4002f05ce.png",
+     "tagline": "The PSA desk on the floor.",
+     "followers": 3641,
+     "location": "Macomb Twp, MI",
+     "tier": "best"
+    },
+    {
+     "rank": 4,
+     "id": "1112296",
+     "slug": "detroit-legends-sports",
+     "name": "Detroit Legends Sports",
+     "logo": "https://assets.swoogo.com/uploads/full/7359257-6a71fced2aa5d.png",
+     "tagline": "A card shop with a storefront and a Discord.",
+     "followers": 2460,
+     "location": "Shelby Twp, MI",
+     "tier": "best"
+    },
+    {
+     "rank": 5,
+     "id": "1118359",
+     "slug": "showboat-breaks",
+     "name": "Showboat Breaks",
+     "logo": "https://assets.swoogo.com/uploads/full/7401948-6a7c825a41b3f.png",
+     "tagline": "Detroit breaks.",
+     "followers": 1324,
+     "location": "Detroit, MI",
+     "tier": "best"
+    },
+    {
+     "rank": 6,
+     "id": "1118368",
+     "slug": "detroit-card-house",
+     "name": "Detroit Card House",
+     "logo": "https://assets.swoogo.com/uploads/full/7402222-6a7c85a08d525.png",
+     "tagline": "Four sports, one table.",
+     "followers": 1149,
+     "location": "Detroit, MI",
+     "tier": "certified"
+    },
+    {
+     "rank": 7,
+     "id": "1120381",
+     "slug": "pirate-hunter-deegs",
+     "name": "Pirate Hunter Deegs",
+     "logo": "https://assets.swoogo.com/uploads/full/7417106-6a7f9a41cef49.jpeg",
+     "tagline": "Naruto, One Piece and Pokémon.",
+     "followers": 939,
+     "location": "Michigan",
+     "tier": "certified"
+    },
+    {
+     "rank": 8,
+     "id": "1117961",
+     "slug": "locked-in-cards",
+     "name": "Locked In Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7398155-6a7b83ddd6d19.png",
+     "tagline": "Pokémon, show to show.",
+     "followers": 335,
+     "location": "Michigan",
+     "tier": "certified"
+    },
+    {
+     "rank": 9,
+     "id": "1120380",
+     "slug": "fodder-tcg",
+     "name": "Fodder TCG",
+     "logo": "https://assets.swoogo.com/uploads/full/7417102-6a7f9a068b070.jpeg",
+     "tagline": "A Lucario collector turned vendor.",
+     "followers": 300,
+     "location": "Michigan",
+     "tier": "certified"
+    },
+    {
+     "rank": 10,
+     "id": "1119607",
+     "slug": "pokedeals-with-jake",
+     "name": "PokeDeals With Jake",
+     "logo": "https://assets.swoogo.com/uploads/full/7409010-6a7ddc4356f9f.png",
+     "tagline": "Half the case is Riftbound now.",
+     "followers": 286,
+     "location": "Michigan",
+     "tier": "certified"
+    }
+   ]
+  },
+  {
+   "key": "sports",
+   "title": "Sports Card Heavyweights",
+   "strapline": "The biggest floor at the show, ranked.",
+   "who": "Every sports-card table.",
+   "field": 68,
+   "entries": [
+    {
+     "rank": 1,
+     "id": "1124793",
+     "slug": "underdog-collectibles",
+     "name": "Underdog Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/full/7458403-6a8c3a4f2d4ed.png",
+     "tagline": "Always bet on the underdog.",
+     "followers": 5000,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 2,
+     "id": "1123798",
+     "slug": "bridgeport-hobby",
+     "name": "Bridgeport Hobby",
+     "logo": "",
+     "tagline": "Four blocks from White Sox Park.",
+     "followers": 17687,
+     "location": "Chicago",
+     "tier": "best"
+    },
+    {
+     "rank": 3,
+     "id": "1124525",
+     "slug": "game-time-hobby-shop",
+     "name": "Game Time Hobby Shop",
+     "logo": "https://assets.swoogo.com/uploads/medium/7453307-6a888c9ef10fb.jpg",
+     "tagline": "Retro games and cards under one roof.",
+     "followers": 10000,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 4,
+     "id": "1122024",
+     "slug": "z-s-sports-house-of-cards",
+     "name": "Z's Sports House of Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7433680-6a84a5f937a39.jpeg",
+     "tagline": "Sports cards, straight up.",
+     "followers": 5685,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 5,
+     "id": "1106032",
+     "slug": "stoney-sports-vault",
+     "name": "Stoney Sports Vault",
+     "logo": "https://assets.swoogo.com/uploads/full/7350694-6a70a1afc0240.png",
+     "tagline": "Real deals, filmed on the road.",
+     "followers": 4050,
+     "location": "",
+     "tier": "best"
+    },
+    {
+     "rank": 6,
+     "id": "1124387",
+     "slug": "haus-of-slabs",
+     "name": "Haus of Slabs",
+     "logo": "https://assets.swoogo.com/uploads/full/7452778-6a88742a60c4e.png",
+     "tagline": "Ultra rare, slabbed.",
+     "followers": 4000,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 7,
+     "id": "1123261",
+     "slug": "orange-cards",
+     "name": "Orange Cards",
+     "logo": "https://assets.swoogo.com/uploads/full/7444880-6a86fe5511efa.png",
+     "tagline": "Metro Detroit, in orange.",
+     "followers": 4000,
+     "location": "Metro Detroit",
+     "tier": "certified"
+    },
+    {
+     "rank": 8,
+     "id": "1117634",
+     "slug": "harvbocards",
+     "name": "HarvboCards",
+     "logo": "https://assets.swoogo.com/uploads/full/7396012-6a7b4002f05ce.png",
+     "tagline": "The PSA desk on the floor.",
+     "followers": 3641,
+     "location": "Macomb Twp, MI",
+     "tier": "certified"
+    },
+    {
+     "rank": 9,
+     "id": "1116903",
+     "slug": "bad-boyz-collectibles",
+     "name": "Bad Boyz Collectibles",
+     "logo": "https://assets.swoogo.com/uploads/full/7389772-6a7a004b1ea5f.png",
+     "tagline": "Jordan, Kobe, LeBron, Brady.",
+     "followers": 3000,
+     "location": "",
+     "tier": "certified"
+    },
+    {
+     "rank": 10,
+     "id": "1124600",
+     "slug": "firerips",
+     "name": "FireRips",
+     "logo": "https://assets.swoogo.com/uploads/full/7454479-6a88bcf76270f.png",
+     "tagline": "Breaks, live.",
+     "followers": 2477,
+     "location": "",
+     "tier": "certified"
+    }
+   ]
+  }
+ ]
+}
