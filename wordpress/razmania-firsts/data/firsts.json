@@ -1,0 +1,495 @@
+{
+  "series": {
+    "name": "Firsts",
+    "tagline": "The first time a card crossed $10,000. Then $100,000. Then $1,000,000. Then $10,000,000.",
+    "dek": "Four price lines, four hobbies, and the card that got there first each time. Baseball has crossed all four. Football, basketball and Pokémon have crossed three and are waiting on the fourth.",
+    "milestones": [
+      10000,
+      100000,
+      1000000,
+      10000000
+    ],
+    "updated": "2026-09-06",
+    "universe_note": "Eligible cards are each category's 100 most valuable, by highest public sale. The ranked lists themselves are the next instalment of the series.",
+    "rules": [
+      "A first is a sale price somebody actually paid, in public, with a date. A private sale counts only when the price was disclosed by a party to it, and is labelled as private.",
+      "The price is the hammer price plus buyer's premium, as the auction house reported it. Asking prices, insured values and offers declined do not count.",
+      "Every entry carries a status. Verified means two independent contemporaneous sources agree on card, price and date. Reported means the sale is widely cited but a detail is still unconfirmed, and the note says which. Open means nobody has sourced it yet; that is an invitation, not a guess.",
+      "Historical firsts are researched by hand. Tracked firsts are detected automatically in RazMania's confirmed eBay sales over $2,000, collected since 28 July 2026, with best-offer listings excluded because eBay shows the asking price on those. The two are never mixed: a tracked first says 'first tracked by RazMania', never 'first ever'.",
+      "Nothing here is revised quietly. A corrected entry keeps its old value in the note."
+    ],
+    "statuses": {
+      "verified": "Two independent sources agree on card, price and date.",
+      "reported": "Widely cited; one detail still to confirm (see note).",
+      "open": "Not yet sourced. Know it? Tell us.",
+      "not_yet": "No card has crossed this line."
+    }
+  },
+  "verticals": [
+    {
+      "vertical": "Baseball",
+      "label": "Baseball",
+      "slug": "baseball",
+      "universe": "The 100 most valuable baseball cards, by highest public sale.",
+      "firsts": [
+        {
+          "threshold": 10000,
+          "status": "reported",
+          "card": "1909–11 T206 Honus Wagner",
+          "grade": "",
+          "price": 25000,
+          "date": "1985",
+          "venue": "Private sale",
+          "buyer": "Bill Mastro",
+          "note": "The Wagner had already set the hobby's first four-figure price, $1,500 in 1972. The 1985 sale at $25,000 is the first five-figure card sale that is consistently documented; whether an earlier one cleared $10,000 privately is unknown.",
+          "sources": [
+            {
+              "name": "T206 Wagner provenance histories (Mastro to Copeland)",
+              "url": ""
+            }
+          ]
+        },
+        {
+          "threshold": 100000,
+          "status": "verified",
+          "card": "1909–11 T206 Honus Wagner (the “Gretzky Wagner”)",
+          "grade": "",
+          "price": 451000,
+          "date": "1991-03-22",
+          "venue": "Sotheby's, New York — the Copeland Collection",
+          "buyer": "Wayne Gretzky and Bruce McNall",
+          "note": "The first six-figure card sold at public auction. The same card had reportedly changed hands privately for $110,000 in 1987, from Bill Mastro to Jim Copeland; if that figure is confirmed, the private sale is the true first and this is the first public one.",
+          "sources": [
+            {
+              "name": "Sotheby's sale record, March 1991",
+              "url": ""
+            },
+            {
+              "name": "Contemporaneous press coverage of the Copeland sale",
+              "url": ""
+            }
+          ]
+        },
+        {
+          "threshold": 1000000,
+          "status": "verified",
+          "card": "1909–11 T206 Honus Wagner, PSA 8 (the “Gretzky Wagner”)",
+          "grade": "PSA 8",
+          "price": 1265000,
+          "date": "2000-07",
+          "venue": "eBay, conducted by Robert Edward Auctions",
+          "buyer": "Brian Seigel",
+          "note": "The first card of any kind to sell for seven figures, nine years after the same card became the first past six.",
+          "sources": [
+            {
+              "name": "Robert Edward Auctions",
+              "url": ""
+            },
+            {
+              "name": "Contemporaneous press coverage, July 2000",
+              "url": ""
+            }
+          ]
+        },
+        {
+          "threshold": 10000000,
+          "status": "verified",
+          "card": "1952 Topps Mickey Mantle #311, SGC 9.5",
+          "grade": "SGC 9.5",
+          "price": 12600000,
+          "date": "2022-08-28",
+          "venue": "Heritage Auctions",
+          "buyer": "",
+          "note": "The first card past eight figures and, at the time, the most expensive sports collectible ever sold. Consigned by Anthony Giordano, who had bought it for $50,000 in 1991.",
+          "sources": [
+            {
+              "name": "Heritage Auctions, August 2022 Platinum Night",
+              "url": ""
+            },
+            {
+              "name": "Widespread press coverage, 28 August 2022",
+              "url": ""
+            }
+          ]
+        }
+      ],
+      "record": {
+        "card": "1952 Topps Mickey Mantle #311, SGC 9.5",
+        "price": 12600000,
+        "date": "2022-08-28",
+        "venue": "Heritage Auctions"
+      }
+    },
+    {
+      "vertical": "Football",
+      "label": "Football",
+      "slug": "football",
+      "universe": "The 100 most valuable football cards, by highest public sale.",
+      "firsts": [
+        {
+          "threshold": 10000,
+          "status": "open",
+          "card": "",
+          "grade": "",
+          "price": null,
+          "date": "",
+          "venue": "",
+          "buyer": "",
+          "note": "The 1935 National Chicle Bronko Nagurski #34 was the hobby's benchmark football card through the 1980s and 1990s, and a high-grade example is the likeliest first five-figure football sale. Not yet sourced.",
+          "sources": []
+        },
+        {
+          "threshold": 100000,
+          "status": "reported",
+          "card": "1935 National Chicle Bronko Nagurski #34, PSA 9",
+          "grade": "PSA 9",
+          "price": 240000,
+          "date": "2011",
+          "venue": "",
+          "buyer": "",
+          "note": "Reported at about $240,000 in 2011 as the first football card past six figures. Exact date and venue still to confirm.",
+          "sources": [
+            {
+              "name": "Hobby press reports, 2011",
+              "url": ""
+            }
+          ]
+        },
+        {
+          "threshold": 1000000,
+          "status": "verified",
+          "card": "2000 Playoff Contenders Championship Ticket Tom Brady autograph #144, /100, BGS 9 (autograph 10)",
+          "grade": "BGS 9",
+          "price": 1320000,
+          "date": "2021-03",
+          "venue": "PWCC Marketplace",
+          "buyer": "",
+          "note": "The first football card to sell for seven figures. Lelands sold another copy for $2.25 million within weeks, and for $3.1 million that June.",
+          "sources": [
+            {
+              "name": "PWCC Marketplace, March 2021",
+              "url": ""
+            },
+            {
+              "name": "Contemporaneous press coverage",
+              "url": ""
+            }
+          ]
+        },
+        {
+          "threshold": 10000000,
+          "status": "not_yet",
+          "card": "",
+          "grade": "",
+          "price": null,
+          "date": "",
+          "venue": "",
+          "buyer": "",
+          "note": "No football card has sold for $10,000,000.",
+          "sources": []
+        }
+      ],
+      "record": {
+        "card": "2017 Panini National Treasures Patrick Mahomes NFL Shield Logoman autograph, 1/1",
+        "price": 4300000,
+        "date": "2021-07",
+        "venue": "PWCC Marketplace, private sale"
+      }
+    },
+    {
+      "vertical": "Basketball",
+      "label": "Basketball",
+      "slug": "basketball",
+      "universe": "The 100 most valuable basketball cards, by highest public sale.",
+      "firsts": [
+        {
+          "threshold": 10000,
+          "status": "open",
+          "card": "",
+          "grade": "",
+          "price": null,
+          "date": "",
+          "venue": "",
+          "buyer": "",
+          "note": "Candidates are the 1948 Bowman George Mikan #69 and the 1986 Fleer Michael Jordan #57 in PSA 10. Neither's first five-figure sale is sourced yet.",
+          "sources": []
+        },
+        {
+          "threshold": 100000,
+          "status": "reported",
+          "card": "1948 Bowman George Mikan #69, PSA 10",
+          "grade": "PSA 10",
+          "price": 403664,
+          "date": "2015",
+          "venue": "",
+          "buyer": "",
+          "note": "Reported at $403,664 in 2015 as the record for any basketball card. Venue, and whether an earlier six-figure basketball sale exists, still to confirm.",
+          "sources": [
+            {
+              "name": "Hobby press reports, 2015",
+              "url": ""
+            }
+          ]
+        },
+        {
+          "threshold": 1000000,
+          "status": "verified",
+          "card": "2003-04 Upper Deck Exquisite Collection LeBron James Rookie Patch Autograph #78, /23, BGS 9.5",
+          "grade": "BGS 9.5",
+          "price": 1845000,
+          "date": "2020-07-19",
+          "venue": "Goldin Auctions",
+          "buyer": "",
+          "note": "The first basketball card to sell for seven figures and, at the time, the most expensive modern card in any sport. Another copy brought $5.2 million in April 2021.",
+          "sources": [
+            {
+              "name": "Goldin Auctions, July 2020",
+              "url": ""
+            },
+            {
+              "name": "Contemporaneous press coverage",
+              "url": ""
+            }
+          ]
+        },
+        {
+          "threshold": 10000000,
+          "status": "not_yet",
+          "card": "",
+          "grade": "",
+          "price": null,
+          "date": "",
+          "venue": "",
+          "buyer": "",
+          "note": "No basketball card has sold for $10,000,000.",
+          "sources": []
+        }
+      ],
+      "record": {
+        "card": "2009-10 Panini National Treasures Stephen Curry NBA Logoman autograph, 1/1",
+        "price": 5900000,
+        "date": "2021-07",
+        "venue": "Private sale"
+      }
+    },
+    {
+      "vertical": "Pokemon",
+      "label": "Pokémon",
+      "slug": "pokemon",
+      "universe": "The 100 most valuable Pokémon cards, by highest public sale.",
+      "firsts": [
+        {
+          "threshold": 10000,
+          "status": "open",
+          "card": "",
+          "grade": "",
+          "price": null,
+          "date": "",
+          "venue": "",
+          "buyer": "",
+          "note": "The Pikachu Illustrator's $54,970 result at Heritage Auctions in November 2016 is the first widely documented five-figure Pokémon auction, but earlier private and Yahoo! Auctions Japan sales almost certainly cleared $10,000 first.",
+          "sources": []
+        },
+        {
+          "threshold": 100000,
+          "status": "reported",
+          "card": "1998 Pikachu Illustrator (CoroCoro Comic promo), PSA 9",
+          "grade": "PSA 9",
+          "price": 195000,
+          "date": "2019-10",
+          "venue": "Weiss Auctions",
+          "buyer": "",
+          "note": "The first Pokémon card past six figures. Grade and exact date still to confirm.",
+          "sources": [
+            {
+              "name": "Weiss Auctions, October 2019",
+              "url": ""
+            }
+          ]
+        },
+        {
+          "threshold": 1000000,
+          "status": "reported",
+          "card": "1998 Pikachu Illustrator, PSA 9",
+          "grade": "PSA 9",
+          "price": 1275000,
+          "date": "2021",
+          "venue": "Private sale",
+          "buyer": "Logan Paul",
+          "note": "Goldin's June 2021 sale of a PSA 7 Illustrator at $900,000 was the first to approach the line. The PSA 9 that Logan Paul acquired for $1,275,000 later that year is the first Pokémon card documented above it; exact date still to confirm.",
+          "sources": [
+            {
+              "name": "Goldin Auctions, June 2021 (PSA 7, $900,000)",
+              "url": ""
+            },
+            {
+              "name": "Reports of the PSA 9 private sale, 2021",
+              "url": ""
+            }
+          ]
+        },
+        {
+          "threshold": 10000000,
+          "status": "not_yet",
+          "card": "",
+          "grade": "",
+          "price": null,
+          "date": "",
+          "venue": "",
+          "buyer": "",
+          "note": "No Pokémon card has sold for $10,000,000.",
+          "sources": []
+        }
+      ],
+      "record": {
+        "card": "1998 Pikachu Illustrator, PSA 10 (the only one graded)",
+        "price": 5275000,
+        "date": "2022-04",
+        "venue": "Private sale via PWCC, to Logan Paul"
+      }
+    }
+  ],
+  "cards": [
+    {
+      "vertical": "Pokemon",
+      "subject": "Charizard",
+      "card": "1999 Pokémon Base Set 1st Edition Charizard #4/102",
+      "firsts": [
+        {
+          "threshold": 10000,
+          "status": "open",
+          "card": "",
+          "grade": "",
+          "price": null,
+          "date": "",
+          "venue": "",
+          "buyer": "",
+          "note": "PSA 10 copies traded around $10,000 on eBay and PWCC in 2016–2017. The first documented crossing is not yet sourced.",
+          "sources": []
+        },
+        {
+          "threshold": 100000,
+          "status": "reported",
+          "card": "1999 Base Set 1st Edition Charizard #4/102, PSA 10",
+          "grade": "PSA 10",
+          "price": 220574,
+          "date": "2020-10",
+          "venue": "Iconic Auctions",
+          "buyer": "Logan Paul",
+          "note": "The first Charizard past six figures, and past $200,000 in the same stroke.",
+          "sources": [
+            {
+              "name": "Iconic Auctions, October 2020",
+              "url": ""
+            }
+          ]
+        },
+        {
+          "threshold": 1000000,
+          "status": "not_yet",
+          "card": "",
+          "grade": "",
+          "price": null,
+          "date": "",
+          "venue": "",
+          "buyer": "",
+          "note": "No Charizard has sold for $1,000,000.",
+          "sources": []
+        },
+        {
+          "threshold": 10000000,
+          "status": "not_yet",
+          "card": "",
+          "grade": "",
+          "price": null,
+          "date": "",
+          "venue": "",
+          "buyer": "",
+          "note": "No Charizard has sold for $10,000,000.",
+          "sources": []
+        }
+      ],
+      "record": {
+        "card": "1999 Base Set 1st Edition Charizard #4/102, PSA 10",
+        "price": 420000,
+        "date": "2022-03",
+        "venue": "PWCC Marketplace"
+      }
+    },
+    {
+      "vertical": "Baseball",
+      "subject": "Mickey Mantle",
+      "card": "1952 Topps Mickey Mantle #311",
+      "firsts": [
+        {
+          "threshold": 10000,
+          "status": "open",
+          "card": "",
+          "grade": "",
+          "price": null,
+          "date": "",
+          "venue": "",
+          "buyer": "",
+          "note": "A 1952 Topps Mantle brought $49,500 at the 1991 Sotheby's Copeland sale, so the first five-figure sale is earlier and, so far, unsourced.",
+          "sources": []
+        },
+        {
+          "threshold": 100000,
+          "status": "open",
+          "card": "",
+          "grade": "",
+          "price": null,
+          "date": "",
+          "venue": "",
+          "buyer": "",
+          "note": "Not yet sourced.",
+          "sources": []
+        },
+        {
+          "threshold": 1000000,
+          "status": "reported",
+          "card": "1952 Topps Mickey Mantle #311, PSA 8.5",
+          "grade": "PSA 8.5",
+          "price": 1135250,
+          "date": "2016-11",
+          "venue": "Heritage Auctions",
+          "buyer": "",
+          "note": "The first 1952 Topps Mantle past seven figures. Exact sale date to confirm.",
+          "sources": [
+            {
+              "name": "Heritage Auctions, November 2016",
+              "url": ""
+            }
+          ]
+        },
+        {
+          "threshold": 10000000,
+          "status": "verified",
+          "card": "1952 Topps Mickey Mantle #311, SGC 9.5",
+          "grade": "SGC 9.5",
+          "price": 12600000,
+          "date": "2022-08-28",
+          "venue": "Heritage Auctions",
+          "buyer": "",
+          "note": "The first card of any kind past eight figures.",
+          "sources": [
+            {
+              "name": "Heritage Auctions, August 2022 Platinum Night",
+              "url": ""
+            },
+            {
+              "name": "Widespread press coverage, 28 August 2022",
+              "url": ""
+            }
+          ]
+        }
+      ],
+      "record": {
+        "card": "1952 Topps Mickey Mantle #311, SGC 9.5",
+        "price": 12600000,
+        "date": "2022-08-28",
+        "venue": "Heritage Auctions"
+      }
+    }
+  ]
+}
