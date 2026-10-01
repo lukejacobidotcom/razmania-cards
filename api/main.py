@@ -18,6 +18,8 @@ from fastapi.responses import JSONResponse
 
 from api.db import q            # one pool, one cursor, shared with the embeds
 from api.embeds import router as embeds_router
+from api.firsts import router as firsts_router
+from api.movers import router as movers_router
 
 ALLOWED = [o.strip() for o in os.environ.get(
     "ALLOWED_ORIGINS", "https://razmania.com,https://www.razmania.com").split(",") if o.strip()]
@@ -30,6 +32,12 @@ app.add_middleware(
 # /embed, /badge and /widgets: public, server-rendered, outside the /v1 key
 # guard on purpose - they are the product other sites paste in.
 app.include_router(embeds_router)
+# Firsts: /v1/firsts* JSON (key-guarded like the rest of /v1) and the
+# server-rendered article pages under /firsts, public like the embeds.
+app.include_router(firsts_router)
+# Card Movers: /v1/movers and /v1/cards* JSON (key-guarded) and the public,
+# server-rendered /movers/ page and per-card chart pages.
+app.include_router(movers_router)
 
 
 @app.middleware("http")

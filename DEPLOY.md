@@ -163,6 +163,71 @@ already exists" — WP File Manager can rename or remove it.
 
 ---
 
+## Step 7 — Firsts (15 min)
+
+The daily series: one to three card-market milestones a day, each its own
+news article at `/firsts/<id>-<slug>/`, plus the hand-researched all-time
+table on `/firsts/`. `firsts/README.md` has the design and the rules.
+
+Ships in three pieces, none of which touches the live `razmania-cards` plugin:
+
+1. **SQL + API** — `git push`. The cron re-applies `db/schema.sql` on its next
+   run (the hash changed): `firsts_log` is created, every settled first since
+   28 Jul 2026 is recorded (about 26,000 rows, a minute or two), and that
+   day's 1–3 are published. `refresh_all_views()` repeats both daily. The API
+   redeploys with `/v1/firsts`, `/v1/firsts/log` and `/firsts/a/<id>`. On the
+   API service set `SITE_LOGO_URL` (a PNG logo URL; Google wants a publisher
+   logo in NewsArticle markup). `FIRSTS_SITE_URL` defaults to
+   `https://razmania.com/firsts/`.
+2. **Plugin** — `python firsts/build.py` validates the all-time JSON, copies
+   it in and writes `wordpress/dist/razmania-firsts.zip`. Plugins → Add New →
+   Upload, activate. It reuses the Index / Cards API settings. Settings →
+   RazMania Firsts: leave the homepage module on, set the tips address.
+3. **Page** — an empty full-width page at `/firsts/` containing
+   `[razmania_firsts]`. If article URLs 404, Settings → Permalinks → Save once.
+
+Verify, in this order: `curl -H "x-api-key: …" <api>/v1/firsts?days=1` shows
+today's picks; open one `/firsts/<id>-<slug>/` and view source — headline,
+standfirst, prices and the `NewsArticle` JSON-LD must be in the raw HTML;
+`/firsts-sitemap.xml` lists it with a `news:news` block; the homepage shows
+the three cards above the content. Then submit `/firsts-sitemap.xml` in
+Search Console and request Google News Publisher Center inclusion for
+`/firsts/`.
+
+Editorial rules that outrank everything else: a tracked first is never
+called "first ever", and **never fill an "open" all-time cell from memory.**
+
+## Step 8 — Card Movers (15 min)
+
+Biggest gainers and losers, busiest cards, and a sales chart for any card, at
+`/movers/` and `/movers/c/<id>-<slug>/`. `movers/README.md` has the design.
+Like Firsts, none of it touches the live `razmania-cards` plugin.
+
+1. **SQL + API** — `git push`. The cron re-applies `db/schema.sql` (the hash
+   changed): `mv_card_sales` and `mv_cards` are built and join
+   `refresh_all_views()`, and the `movers_*` tunables are seeded into
+   `schema_meta`. The API redeploys with `/v1/movers`, `/v1/cards/*` and
+   `/movers/*`. `MOVERS_SITE_URL` defaults to `https://razmania.com/movers/`;
+   set it only if the page lives elsewhere.
+2. **Plugin** — `python wordpress/build_zip.py razmania-movers`, then Plugins →
+   Add New → Upload `wordpress/dist/razmania-movers.zip`, activate. It reuses
+   the Firsts / Index / Cards API settings.
+3. **Page** — an empty full-width page at `/movers/` containing
+   `[razmania_movers]`. If card URLs 404, Settings → Permalinks → Save once.
+   Optionally put `[razmania_movers_strip]` on the homepage.
+4. **Cloudflare** — the site's HTML cache is 31 days. Add a Cache Rule for
+   `/movers/*` with an edge TTL of 1 hour (or "respect origin": the plugin
+   sends `s-maxage=3600`), or the lists will show last month's movers.
+
+The plugin has never run: there is no PHP on the build machine, so it is
+unlinted. After activating, check each of these before linking the page
+anywhere. `curl -H "x-api-key: …" <api>/v1/movers?limit=3` returns gainers
+with `settled_through` four days back. `/movers/` view-source has the gainers'
+prices in the raw HTML. `/movers/?q=gengar+108` lists cards. A card link
+opens `/movers/c/<id>-<slug>/` with the chart, and `/movers/c/<id>/` 301s to
+it. `/movers/?vertical=Pokemon` filters (the parameter is `vertical` because
+`category` is a WordPress query word).
+
 ## When to change the floor
 
 Drop `MIN_PRICE` to `500` (and `publish_floor` in `db/schema.sql` to match, then

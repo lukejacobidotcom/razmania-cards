@@ -313,6 +313,52 @@ The plugin also exposes `/wp-json/razmania/v1/<endpoint>` as a same-origin
 proxy, so interactive JS can filter and sort without CORS and without ever
 seeing the API key.
 
+## Firsts
+
+The daily series at **razmania.com/firsts/**: one to three card-market
+milestones a day, each its own news article — "First $100,000 Charizard
+sale", "First 2026 Football rookie card to sell for $20,000", "First day with
+100 Pokémon sales over $2,000", "The 2,500th tracked Basketball sale" — the
+first time the warehouse sees the market do something. `record_firsts()`
+writes every first it can find into the append-only `firsts_log` at the end
+of each refresh (price lines per category, player, card, set and release
+year; day, week and cumulative counts and volume; index levels);
+`publish_firsts()` picks the day's 1–3 by an editorial score with rules
+against repetition. `api/firsts.py` renders each as a full server-side
+article with NewsArticle markup, charts and the subject's numbers, and the
+plugin hosts it at `/firsts/<id>-<slug>/` with a news sitemap. The page also
+carries the hobby's hand-researched all-time firsts ($10K / $100K / $1M /
+$10M per category), each cell with a printed status. A tracked first is never
+called "first ever". Brief, rules and worksheet: `firsts/README.md`.
+
+```
+[razmania_firsts]                       the series page: today, archive, all-time table, rules
+[razmania_firsts_today]                 today's 1–3 — homepage module
+[razmania_firsts_archive days="30"]     the last N days
+[razmania_firsts vertical="Baseball"]   one category of the all-time table
+[razmania_firsts_cards]                 per-card all-time profiles
+[razmania_firsts_strip]                 four all-time tiles
+```
+
+## Card Movers
+
+**razmania.com/movers/**: the graded cards whose confirmed sale price moved
+most, the busiest cards, and a chart of every sale for any card a reader
+searches. A move is always **one card against itself** (player or Pokémon,
+year, set, number, parallel, grade), the median of the last 14 settled days
+against the 30 before, and a card only lists when it is graded, has enough
+sales on both sides, its earlier sales agree with each other (so the name is
+not covering two cards), its recent sales agree on the direction, it trades
+clear of the $2,000 floor, and it moved at least 10%. `mv_card_sales` and
+`mv_cards` hold it all; `api/movers.py` renders the page and the per-card
+charts; the `razmania-movers` plugin hosts them at `/movers/` and
+`/movers/c/<id>-<slug>/`. Design, measurements and tuning: `movers/README.md`.
+
+```
+[razmania_movers]          search any card, gainers, losers, busiest cards, method
+[razmania_movers_strip]    three gainers and three losers — homepage or sidebar
+```
+
 ## The widget store
 
 `GET /widgets` on the API service is a configurator: pick a widget, set size,
@@ -373,6 +419,10 @@ automatically — they use the request's own host.
 | `GET /v1/players/{slug}` | Player page: summary + comps + recent sales, one call. |
 | `GET /v1/comps?player=&grade=` | Card-level comps (n≥3 only). |
 | `GET /v1/search?q=` | Fuzzy title search. |
+| `GET /v1/movers?vertical=&limit=` | Card Movers: gainers, losers, busiest cards, and the windows they were measured on. |
+| `GET /v1/cards/search?q=&vertical=` | Cards (not sales) matching a search, most-traded first. |
+| `GET /v1/cards/{card_id}` | One card: identity, stats, its move or the rule that kept it off the lists, every sale, other grades. |
+| `GET /movers/`, `/movers/c/{id}-{slug}`, `/movers/strip` | The Card Movers page, card charts and homepage strip (public, no key; `?fragment=1` for WordPress). |
 | `GET /v1/sales?...` | Raw rows for ad-hoc filtering. |
 
 All responses carry `Cache-Control: s-maxage=1800, stale-while-revalidate=86400`.
